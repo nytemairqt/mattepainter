@@ -2,6 +2,8 @@
 # Meta Dictionary
 #--------------------------------------------------------------
 
+# Edit for git testing
+
 bl_info = {
 	"name" : "MattePainter",
 	"author" : "SceneFiller",
