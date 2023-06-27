@@ -17,6 +17,7 @@ bl_info = {
 # Import
 #--------------------------------------------------------------
 
+import os
 import bpy
 import bpy_extras
 import math 
@@ -76,7 +77,7 @@ def addMask(name, width, height):
 	mask.pixels = pixels
 	return mask 
 
-def setShaders(nodes, links, image_file, mask):
+def setShaders(nodes, links, image_file, mask, isSequence=False):
 	material_output = nodes.get("Material Output") # Output Node
 	principled_bsdf = nodes.get("Principled BSDF") 
 	nodes.remove(principled_bsdf) # Delete BSDF
@@ -102,6 +103,7 @@ def setShaders(nodes, links, image_file, mask):
 	node_HSV.name = 'HSV'
 	node_mask.name = 'transparency_mask'
 	node_opacity.name = 'opacity'	
+	node_albedo.name = 'albedo'
 
 	# Default Values
 
@@ -119,12 +121,11 @@ def setShaders(nodes, links, image_file, mask):
 	node_opacity.inputs[0].default_value = 1.0
 	node_opacity.inputs[1].default_value = (0, 0, 0, 1)
 
-
 	# Connections
 
-	link = links.new(node_albedo.outputs[0], node_HSV.inputs[4]) # Albedo -> HSV
-	link = links.new(node_HSV.outputs[0], node_curves.inputs[1]) # HSV -> Curves
-	link = links.new(node_curves.outputs[0], node_emission.inputs[0]) # Curves -> Emission
+	link = links.new(node_albedo.outputs[0], node_curves.inputs[1]) # Albedo -> Curves
+	link = links.new(node_curves.outputs[0], node_HSV.inputs[4]) # Curves -> HSV
+	link = links.new(node_HSV.outputs[0], node_emission.inputs[0]) # Curves -> Emission
 	link = links.new(node_emission.outputs[0], node_mix.inputs[2]) # Emission -> Mix Shader	
 	link = links.new(node_transparent.outputs[0], node_mix.inputs[1]) # Transparent BSDF -> Mix Shader
 	link = links.new(node_mask.outputs[0], node_invert.inputs[1]) # Mask -> Invert Input
@@ -148,8 +149,8 @@ def setShaders(nodes, links, image_file, mask):
 	node_mask.location = Vector((-1100.0, 200.0))
 	node_invert.location = Vector((-800.0, 200.0))
 	node_opacity.location = Vector((-500.0, 200.0))
-	node_HSV.location = Vector((-800.0, -300.0))
-	node_curves.location = Vector((-600.0, -300.0))
+	node_HSV.location = Vector((-500.0, -300.0))
+	node_curves.location = Vector((-800.0, -300.0))
 	node_overlayRGB.location = Vector((-1400.0, 0.0))
 	node_mixRGB.location = Vector((-1600.0, 200.0))
 	node_noise.location = Vector((-1600.0, -200.0))
@@ -180,6 +181,7 @@ class importFile(bpy.types.Operator, ImportHelper):
 
 		# Image Loading
 		image = load_image(self.filepath, check_existing=True)
+
 		mask_name = "mask_" + image.name
 		# Put Mask Resolution Check Here
 		mask = addMask(name=mask_name, width=image.size[0], height=image.size[1])		
@@ -202,7 +204,8 @@ class importFile(bpy.types.Operator, ImportHelper):
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
 		links = material.node_tree.links
-		setShaders(nodes=nodes, links=links, image_file=image, mask=mask)	
+
+		setShaders(nodes=nodes, links=links, image_file=image, mask=mask, isSequence=True)	
 
 		# End Method
 		return {'FINISHED'}	
@@ -238,7 +241,7 @@ class makeUnique(bpy.types.Operator):
 			active_object.data.materials[0] = new_material
 			material = active_object.data.materials[0]
 			nodes = material.node_tree.nodes 
-			image = nodes.get('Image Texture').image
+			image = nodes.get('albedo').image
 			width = image.size[0]		
 			height = image.size[1]
 			node_mask = nodes.get('transparency_mask')
@@ -247,7 +250,38 @@ class makeUnique(bpy.types.Operator):
 			new_mask.pixels = pixels
 			node_mask.image = new_mask
 
-		return {'FINISHED'}			
+		return {'FINISHED'}		
+
+class makeSequence(bpy.types.Operator):
+	# Converts an imported image into a Sequence.
+	bl_idname = "mattepainter.make_sequence"
+	bl_label = "Converts an imported image into a Sequence"
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Converts an imported image into a Sequence"
+
+	def execute(self, context):
+		# check if active object is inside MattePainter
+		# if True, create new shader tree for it
+		active_object = bpy.context.active_object
+		if active_object.users_collection[0] == bpy.data.collections['MattePainter']:			
+			material = active_object.data.materials[0]
+			nodes = material.node_tree.nodes 
+			image = nodes.get('albedo').image
+			image.source = 'SEQUENCE'
+			image_user = nodes.get('albedo').image_user
+			image_user.use_cyclic = True 
+			image_user.use_auto_refresh = True
+
+			for root, dirs, files in os.walk(Path(image.filepath).parent.absolute()):
+				files = [file for file in files if file.endswith(('.jpg', '.jpeg', '.png', '.tif', 'tiff'))]
+				frames = len(files)
+
+			if frames > 1 and not frames == None:
+				image_user.frame_duration = frames
+			else:
+				image_user.frame_duration = 1
+
+		return {'FINISHED'}	
 
 class saveAllImages(bpy.types.Operator):
 	# Saves all edited Image files.
@@ -349,7 +383,7 @@ class layerInvertMask(bpy.types.Operator):
 
 class panelMain(bpy.types.Panel):
 	bl_label = "MattePainter"
-	bl_idname = "_PT_pnlMain"
+	bl_idname = "MATTEPAINTER_PT_panelMain"
 	bl_space_type = 'VIEW_3D'
 	bl_region_type = 'UI'
 	bl_category = 'MattePainter 2'
@@ -359,11 +393,11 @@ class panelMain(bpy.types.Panel):
 
 class panelLayers(bpy.types.Panel):
 	bl_label = "Layers"
-	bl_idname = "_PT_pnlLayers"
+	bl_idname = "MATTEPAINTER_PT_panelLayers"
 	bl_space_type = 'VIEW_3D'
 	bl_region_type = 'UI'
 	bl_category = 'MattePainter 2'
-	bl_parent_id = '_PT_pnlMain'
+	bl_parent_id = 'MATTEPAINTER_PT_panelMain'
 
 	def draw(self, context):
 		layout = self.layout
@@ -376,7 +410,7 @@ class panelLayers(bpy.types.Panel):
 		row = layout.row()
 		row.operator(paintMask.bl_idname, text="Paint Mask", icon="CONSOLE")
 
-		if bpy.data.collections.find(r"MattePainter") != -1:
+		if bpy.data.collections.find(r"MattePainter") != -1 and len(bpy.data.collections[r"MattePainter"].objects) > 0:
 			box = layout.box()
 			box.enabled = True
 			box.alert = False
@@ -402,11 +436,11 @@ class panelLayers(bpy.types.Panel):
 
 class panelFileManagement(bpy.types.Panel):
 	bl_label = "File Management"
-	bl_idname = "_PT_pnlFileManagement"
+	bl_idname = "MATTEPAINTER_PT_panelFileManagement"
 	bl_space_type = 'VIEW_3D'
 	bl_region_type = 'UI'
 	bl_category = 'MattePainter 2'
-	bl_parent_id = '_PT_pnlMain'
+	bl_parent_id = 'MATTEPAINTER_PT_panelMain'
 
 	def draw(self, context):
 		layout = self.layout
@@ -415,7 +449,13 @@ class panelFileManagement(bpy.types.Panel):
 		row = layout.row()
 		row.operator(saveAllImages.bl_idname, text="Save All", icon_value=727)
 
-		# Clone Instance
+		# Make Sequence 
+		if (not bpy.context.active_object == None and bpy.context.active_object.users_collection[0] == bpy.data.collections['MattePainter']):
+			if bpy.context.active_object.data.materials[0].node_tree.nodes.get('albedo').image.source == 'FILE':
+				row = layout.row()
+				row.operator(makeSequence.bl_idname, text='Convert To Sequence', icon="CONSOLE")
+
+		# Make Unique
 		row = layout.row()
 		row.operator(makeUnique.bl_idname, text="Make Unique", icon="CONSOLE")
 
@@ -433,11 +473,11 @@ class panelFileManagement(bpy.types.Panel):
 
 class panelColorGrade(bpy.types.Panel):
 	bl_label = "Color Grade"
-	bl_idname = "_PT_pnlColorGrade"
+	bl_idname = "MATTEPAINTER_PT_panelColorGrade"
 	bl_space_type = 'VIEW_3D'
 	bl_region_type = 'UI'
 	bl_category = 'MattePainter 2'
-	bl_parent_id = '_PT_pnlMain'
+	bl_parent_id = 'MATTEPAINTER_PT_panelMain'
 
 	def draw(self, context):
 		layout = self.layout
@@ -471,6 +511,7 @@ def register():
 	bpy.utils.register_class(importFile)
 	bpy.utils.register_class(paintMask)
 	bpy.utils.register_class(makeUnique)
+	bpy.utils.register_class(makeSequence)
 	bpy.utils.register_class(saveAllImages)
 	bpy.utils.register_class(clearUnused)
 	bpy.utils.register_class(layerSelect)
@@ -494,6 +535,7 @@ def unregister():
 	bpy.utils.unregister_class(importFile)
 	bpy.utils.unregister_class(paintMask)
 	bpy.utils.unregister_class(makeUnique)
+	bpy.utils.unregister_class(makeSequence)
 	bpy.utils.unregister_class(saveAllImages)
 	bpy.utils.unregister_class(clearUnused)
 	bpy.utils.unregister_class(layerSelect)
