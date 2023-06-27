@@ -164,7 +164,7 @@ class importFile(bpy.types.Operator, ImportHelper):
 	bl_description = "Imports an image file and automatically builds the Shader Tree"
 
 	filter_glob: bpy.props.StringProperty(
-			default='*.jpg;*.jpeg;*.png;*.tif;*.tiff;*.bmp;',
+			default='*.jpg;*.jpeg;*.png;*.tif;*.tiff;*.bmp;*.avi;*.mp4;*.mov;*.webm;',
 			options={'HIDDEN'}
 		)
 
