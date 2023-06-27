@@ -2,8 +2,6 @@
 # Meta Dictionary
 #--------------------------------------------------------------
 
-# Edit for git testing
-
 bl_info = {
 	"name" : "MattePainter",
 	"author" : "SceneFiller",
@@ -23,7 +21,7 @@ import bpy
 import bpy_extras
 import math 
 from mathutils import Vector
-import os
+import mathutils
 from bpy_extras.image_utils import load_image
 from pathlib import Path
 import shutil
@@ -87,6 +85,7 @@ def setShaders(nodes, links, image_file, mask):
 	node_transparent = nodes.new(type="ShaderNodeBsdfTransparent")
 	node_mix = nodes.new(type="ShaderNodeMixShader")
 	node_invert = nodes.new(type="ShaderNodeInvert")
+	node_opacity = nodes.new(type="ShaderNodeMixRGB")
 	node_curves = nodes.new(type="ShaderNodeRGBCurve")
 	node_HSV = nodes.new(type="ShaderNodeHueSaturation")
 	node_noise = nodes.new(type="ShaderNodeTexNoise")
@@ -94,8 +93,15 @@ def setShaders(nodes, links, image_file, mask):
 	node_overlayRGB = nodes.new(type="ShaderNodeMixRGB")
 	node_coord = nodes.new(type="ShaderNodeTexCoord")
 	node_albedo = nodes.new(type="ShaderNodeTexImage")
-	node_mask = nodes.new(type="ShaderNodeTexImage")	
-	node_mask.name = 'transparency_mask'	
+	node_mask = nodes.new(type="ShaderNodeTexImage")			
+
+	# Naming Nodes for Color Grading
+
+	node_overlayRGB.name = 'blur_mix'
+	node_curves.name = 'curves'
+	node_HSV.name = 'HSV'
+	node_mask.name = 'transparency_mask'
+	node_opacity.name = 'opacity'	
 
 	# Default Values
 
@@ -110,6 +116,9 @@ def setShaders(nodes, links, image_file, mask):
 	node_mixRGB.inputs[0].default_value = 0.0
 	node_overlayRGB.blend_type = "OVERLAY"
 	node_overlayRGB.inputs[0].default_value = 0.0
+	node_opacity.inputs[0].default_value = 1.0
+	node_opacity.inputs[1].default_value = (0, 0, 0, 1)
+
 
 	# Connections
 
@@ -119,7 +128,8 @@ def setShaders(nodes, links, image_file, mask):
 	link = links.new(node_emission.outputs[0], node_mix.inputs[2]) # Emission -> Mix Shader	
 	link = links.new(node_transparent.outputs[0], node_mix.inputs[1]) # Transparent BSDF -> Mix Shader
 	link = links.new(node_mask.outputs[0], node_invert.inputs[1]) # Mask -> Invert Input
-	link = links.new(node_invert.outputs[0], node_mix.inputs[0]) # Invert -> Mix Factor
+	link = links.new(node_invert.outputs[0], node_opacity.inputs[2]) # Invert -> Opacity
+	link = links.new(node_opacity.outputs[0], node_mix.inputs[0]) # Opacity -> Mix
 	link = links.new(node_mix.outputs[0], material_output.inputs[0]) # Mix -> Output
 	link = links.new(node_coord.outputs[2], node_mixRGB.inputs[1]) # Coord -> MixRGB
 	link = links.new(node_coord.outputs[2], node_noise.inputs[0]) # Coord -> Noise
@@ -136,7 +146,8 @@ def setShaders(nodes, links, image_file, mask):
 	node_transparent.location= Vector((-300.0, -50.0))
 	node_albedo.location = Vector((-1100.0, -300.0))
 	node_mask.location = Vector((-1100.0, 200.0))
-	node_invert.location = Vector((-500.0, 200.0))
+	node_invert.location = Vector((-800.0, 200.0))
+	node_opacity.location = Vector((-500.0, 200.0))
 	node_HSV.location = Vector((-800.0, -300.0))
 	node_curves.location = Vector((-600.0, -300.0))
 	node_overlayRGB.location = Vector((-1400.0, 0.0))
@@ -332,10 +343,6 @@ class layerInvertMask(bpy.types.Operator):
 			node_mask.mute = True
 		return {'FINISHED'}	
 
-	
-
-
-
 #--------------------------------------------------------------
 # Interface
 #--------------------------------------------------------------
@@ -424,6 +431,29 @@ class panelFileManagement(bpy.types.Panel):
 		row = layout.row()
 		layout.prop(bpy.context.scene.view_settings,'view_transform',icon_value=54, text=r"Color Space", emboss=True, expand=False,)
 
+class panelColorGrade(bpy.types.Panel):
+	bl_label = "Color Grade"
+	bl_idname = "_PT_pnlColorGrade"
+	bl_space_type = 'VIEW_3D'
+	bl_region_type = 'UI'
+	bl_category = 'MattePainter 2'
+	bl_parent_id = '_PT_pnlMain'
+
+	def draw(self, context):
+		layout = self.layout
+		if (not bpy.context.active_object == None and bpy.context.active_object.users_collection[0] == bpy.data.collections['MattePainter']):
+			box = layout.box()
+			box.enabled = True
+			box.alert = False
+			box.scale_x = 1.0
+			box.scale_y = 1.0
+			box.prop(bpy.context.active_object.data.materials[0].node_tree.nodes[r"opacity"].inputs[0], 'default_value', text=r"Opacity", emboss=True, slider=True)
+			box.prop(bpy.context.active_object.data.materials[0].node_tree.nodes[r"blur_mix"].inputs[0], 'default_value', text=r"Blur", emboss=True, slider=True)
+			sn_layout = box
+			sn_layout.template_curve_mapping(bpy.context.active_object.data.materials[0].node_tree.nodes[r"curves"], 'mapping', type='COLOR')
+			box.prop(bpy.context.active_object.data.materials[0].node_tree.nodes[r"HSV"].inputs[0], 'default_value', text=r"Hue", emboss=True, slider=True)
+			box.prop(bpy.context.active_object.data.materials[0].node_tree.nodes[r"HSV"].inputs[1], 'default_value', text=r"Saturation", emboss=True, slider=True)
+			box.prop(bpy.context.active_object.data.materials[0].node_tree.nodes[r"HSV"].inputs[2], 'default_value', text=r"Value", emboss=True, slider=True)
 
 
 #--------------------------------------------------------------
@@ -435,6 +465,7 @@ def register():
 	bpy.utils.register_class(panelMain)
 	bpy.utils.register_class(panelLayers)
 	bpy.utils.register_class(panelFileManagement)
+	bpy.utils.register_class(panelColorGrade)
 
 	# Functionality
 	bpy.utils.register_class(importFile)
@@ -457,6 +488,7 @@ def unregister():
 	bpy.utils.unregister_class(panelMain)
 	bpy.utils.unregister_class(panelLayers)
 	bpy.utils.unregister_class(panelFileManagement)
+	bpy.utils.unregister_class(panelColorGrade)
 
 	# Functionality
 	bpy.utils.unregister_class(importFile)
