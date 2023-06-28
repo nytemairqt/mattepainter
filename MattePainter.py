@@ -203,6 +203,10 @@ class importFile(bpy.types.Operator, ImportHelper):
 
 		# Geometry and Alignment
 		bpy.ops.mesh.primitive_plane_add(enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
+		bpy.ops.object.mode_set(mode="EDIT")
+		bpy.ops.mesh.subdivide(number_cuts=1)
+		bpy.ops.object.mode_set(mode="OBJECT")
+
 		active_object = bpy.context.active_object
 		active_object.name = image.name
 		scene = bpy.context.scene
@@ -250,6 +254,10 @@ class newEmptyPaintLayer(bpy.types.Operator):
 
 		# Geometry and Alignment
 		bpy.ops.mesh.primitive_plane_add(enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
+		bpy.ops.object.mode_set(mode="EDIT")
+		bpy.ops.mesh.subdivide(number_cuts=1)
+		bpy.ops.object.mode_set(mode="OBJECT")
+		
 		active_object = bpy.context.active_object
 		active_object.name = image.name
 		scene = bpy.context.scene
