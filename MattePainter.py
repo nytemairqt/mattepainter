@@ -108,6 +108,11 @@ def setShaders(nodes, links, image_file, mask=None, isPaintLayer=False):
 	node_invert.mute = True
 	node_albedo.image = image_file
 
+	if image_file.source == "MOVIE":
+		node_albedo.image_user.use_cyclic = True 
+		node_albedo.image_user.use_auto_refresh = True
+		node_albedo.image_user.frame_duration = image_file.frame_duration		
+
 	# Setup Mask
 	if not mask == None:
 		node_mask = nodes.new(type="ShaderNodeTexImage")	
@@ -471,11 +476,11 @@ class panelLayers(bpy.types.Panel):
 
 		# New Paint Layer Button
 		row = layout.row()
-		row.operator(newEmptyPaintLayer.bl_idname, text="New Paint Layer", icon="CONSOLE")
+		row.operator(newEmptyPaintLayer.bl_idname, text="New Empty Layer", icon="CONSOLE")
 
 		# Paint Button
 		row = layout.row()
-		row.operator(paintMask.bl_idname, text="Paint Mask", icon="CONSOLE")
+		row.operator(paintMask.bl_idname, text="Paint", icon="CONSOLE")
 
 		if bpy.data.collections.find(r"MattePainter") != -1 and len(bpy.data.collections[r"MattePainter"].objects) > 0:
 			box = layout.box()
