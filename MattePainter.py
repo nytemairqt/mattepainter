@@ -77,7 +77,7 @@ def addMask(name, width, height):
 	mask.pixels = pixels
 	return mask 
 
-def setShaders(nodes, links, image_file, mask, isSequence=False):
+def setShaders(nodes, links, image_file, mask=None, isPaintLayer=False):
 	material_output = nodes.get("Material Output") # Output Node
 	principled_bsdf = nodes.get("Principled BSDF") 
 	nodes.remove(principled_bsdf) # Delete BSDF
@@ -94,24 +94,27 @@ def setShaders(nodes, links, image_file, mask, isSequence=False):
 	node_overlayRGB = nodes.new(type="ShaderNodeMixRGB")
 	node_coord = nodes.new(type="ShaderNodeTexCoord")
 	node_albedo = nodes.new(type="ShaderNodeTexImage")
-	node_mask = nodes.new(type="ShaderNodeTexImage")			
+		
 
 	# Naming Nodes for Color Grading
 
 	node_overlayRGB.name = 'blur_mix'
 	node_curves.name = 'curves'
-	node_HSV.name = 'HSV'
-	node_mask.name = 'transparency_mask'
+	node_HSV.name = 'HSV'	
 	node_opacity.name = 'opacity'	
 	node_albedo.name = 'albedo'
 
 	# Default Values
-
 	node_invert.mute = True
 	node_albedo.image = image_file
-	node_mask.image = mask
-	node_mask.select = True
-	nodes.active = node_mask
+
+	# Setup Mask
+	if not mask == None:
+		node_mask = nodes.new(type="ShaderNodeTexImage")	
+		node_mask.name = 'transparency_mask'		
+		node_mask.image = mask
+		node_mask.select = True		
+		nodes.active = node_mask	
 
 	node_noise.inputs[2].default_value = 1000000.0
 	node_mixRGB.blend_type = "MIX"
@@ -128,7 +131,6 @@ def setShaders(nodes, links, image_file, mask, isSequence=False):
 	link = links.new(node_HSV.outputs[0], node_emission.inputs[0]) # Curves -> Emission
 	link = links.new(node_emission.outputs[0], node_mix.inputs[2]) # Emission -> Mix Shader	
 	link = links.new(node_transparent.outputs[0], node_mix.inputs[1]) # Transparent BSDF -> Mix Shader
-	link = links.new(node_mask.outputs[0], node_invert.inputs[1]) # Mask -> Invert Input
 	link = links.new(node_invert.outputs[0], node_opacity.inputs[2]) # Invert -> Opacity
 	link = links.new(node_opacity.outputs[0], node_mix.inputs[0]) # Opacity -> Mix
 	link = links.new(node_mix.outputs[0], material_output.inputs[0]) # Mix -> Output
@@ -137,7 +139,13 @@ def setShaders(nodes, links, image_file, mask, isSequence=False):
 	link = links.new(node_noise.outputs[1], node_overlayRGB.inputs[2]) # Noise -> OverlayRGB
 	link = links.new(node_mixRGB.outputs[0], node_overlayRGB.inputs[1]) # MixRGB -> OverlayRGB
 	link = links.new(node_overlayRGB.outputs[0], node_albedo.inputs[0]) # OverlayRGB -> Albedo
-	link = links.new(node_overlayRGB.outputs[0], node_mask.inputs[0]) # OverlayRGB -> Mask
+
+	if not mask == None:
+		link = links.new(node_mask.outputs[0], node_invert.inputs[1]) # Mask -> Invert Input
+		link = links.new(node_overlayRGB.outputs[0], node_mask.inputs[0]) # OverlayRGB -> Mask
+	else:
+		link = links.new(node_albedo.outputs[1], node_invert.inputs[1]) # Albedo Alpha -> Invert Input
+		link = links.new(node_overlayRGB.outputs[0], node_albedo.inputs[0]) # OverlayRGB -> Albedo
 
 	# Vector Positions
 
@@ -145,8 +153,7 @@ def setShaders(nodes, links, image_file, mask, isSequence=False):
 	node_mix.location = Vector((-100.0, 0.0))
 	node_emission.location = Vector((-300.0, -200.0))
 	node_transparent.location= Vector((-300.0, -50.0))
-	node_albedo.location = Vector((-1100.0, -300.0))
-	node_mask.location = Vector((-1100.0, 200.0))
+	node_albedo.location = Vector((-1100.0, -300.0))	
 	node_invert.location = Vector((-800.0, 200.0))
 	node_opacity.location = Vector((-500.0, 200.0))
 	node_HSV.location = Vector((-500.0, -300.0))
@@ -154,7 +161,9 @@ def setShaders(nodes, links, image_file, mask, isSequence=False):
 	node_overlayRGB.location = Vector((-1400.0, 0.0))
 	node_mixRGB.location = Vector((-1600.0, 200.0))
 	node_noise.location = Vector((-1600.0, -200.0))
-	node_coord.location = Vector((-1800.0, 0.0))
+	node_coord.location = Vector((-1800.0, 0.0))	
+	if not mask == None:
+		node_mask.location = Vector((-1100.0, 200.0))
 		
 
 class importFile(bpy.types.Operator, ImportHelper):
@@ -163,6 +172,7 @@ class importFile(bpy.types.Operator, ImportHelper):
 	bl_idname = "mattepainter.import_file"
 	bl_label = "Import image file."
 	bl_description = "Imports an image file and automatically builds the Shader Tree"
+	bl_options = {"REGISTER"}
 
 	filter_glob: bpy.props.StringProperty(
 			default='*.jpg;*.jpeg;*.png;*.tif;*.tiff;*.bmp;*.avi;*.mp4;*.mov;*.webm;',
@@ -182,15 +192,14 @@ class importFile(bpy.types.Operator, ImportHelper):
 		# Image Loading
 		image = load_image(self.filepath, check_existing=True)
 
+		# Mask Generation
 		mask_name = "mask_" + image.name
-		# Put Mask Resolution Check Here
 		mask = addMask(name=mask_name, width=image.size[0], height=image.size[1])		
 
 		# Geometry and Alignment
 		bpy.ops.mesh.primitive_plane_add(enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
 		active_object = bpy.context.active_object
 		active_object.name = image.name
-		active_object.prettyName = active_object.name
 		scene = bpy.context.scene
 
 		active_object.rotation_euler = camera.rotation_euler
@@ -205,16 +214,67 @@ class importFile(bpy.types.Operator, ImportHelper):
 		nodes = material.node_tree.nodes
 		links = material.node_tree.links
 
-		setShaders(nodes=nodes, links=links, image_file=image, mask=mask, isSequence=True)	
+		setShaders(nodes=nodes, links=links, image_file=image, mask=mask, isPaintLayer=False)	
 
 		# End Method
 		return {'FINISHED'}	
+
+class newEmptyPaintLayer(bpy.types.Operator):
+	bl_idname = "mattepainter.new_empty_paint_layer"
+	bl_label = "Creates a new empty layer for painting."
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Creates a new empty layer for painting"
+
+	def execute(self, context):		
+		# Camera Safety Check
+		camera = bpy.context.scene.camera
+		if not camera: # Safety Check
+			bpy.ops.object.camera_add(enter_editmode=False, align='VIEW', location=(0, 0, 0), rotation=(0, 0, 0), scale=(1, 1, 1))
+		camera = bpy.context.scene.camera
+
+		# Create Collection
+		createMattePainterCollection()	
+
+		# Image Generation
+		render = bpy.data.scenes[0].render
+		width = render.resolution_x
+		height = render.resolution_y
+		image = bpy.data.images.new(name="PaintLayer", width=width, height=height)
+		pixels = [0.0] * (4 * width * height)
+		image.pixels = pixels
+
+		# Geometry and Alignment
+		bpy.ops.mesh.primitive_plane_add(enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
+		active_object = bpy.context.active_object
+		active_object.name = image.name
+		scene = bpy.context.scene
+
+		active_object.rotation_euler = camera.rotation_euler
+		alignToCamera(target=active_object, image=image, camera=camera, scene=scene)
+
+		# Shader Setup
+		material = bpy.data.materials.new(name=image.name)
+		active_object.data.materials.append(material)
+		material.blend_method = "BLEND"
+		material.shadow_method = "CLIP"
+		material.use_nodes = True
+		nodes = material.node_tree.nodes
+		links = material.node_tree.links
+
+		setShaders(nodes=nodes, links=links, image_file=image, mask=None, isPaintLayer=True) # Use image as mask
+
+		# create plane
+		# position & scale
+		# create blank image file
+		# call set shaders & use the generated image file 
+		return {'FINISHED'}
 
 class paintMask(bpy.types.Operator):
 	# Switches to Texture Paint Mode.
 	bl_idname = "mattepainter.paint_mask"
 	bl_label = "Switch to Mask Paint mode."
 	bl_description = "Switch to Mask Paint mode"
+	bl_options = {"REGISTER", "UNDO"}
 
 	def execute(self, context):
 		# Safety Checks
@@ -288,6 +348,7 @@ class saveAllImages(bpy.types.Operator):
 	bl_idname = "mattepainter.save_all_images"
 	bl_label = "Saves all modified Images."
 	bl_description = "Saves all modified images"
+	bl_options = {"REGISTER"}
 
 	def execute(self, context):
 		bpy.ops.image.save_all_modified()
@@ -298,6 +359,7 @@ class clearUnused(bpy.types.Operator):
 	bl_idname = "mattepainter.clear_unused"
 	bl_label = "Purges unused Data Blocks."
 	bl_description = "Removes unlinked data from the Blend File. WARNING: This process cannot be undone"
+	bl_options = {"REGISTER"}
 
 	def execute(self, context):
 		bpy.ops.outliner.orphans_purge('INVOKE_DEFAULT' if True else 'EXEC_DEFAULT', num_deleted=0, do_local_ids=True, do_linked_ids=False, do_recursive=True)
@@ -308,6 +370,7 @@ class layerSelect(bpy.types.Operator):
 	bl_idname = "mattepainter.layer_select"
 	bl_label = "Select layer."
 	bl_description = "Selects the Layer"
+	bl_options = {"REGISTER", "UNDO"}
 	layerIndex: bpy.props.IntProperty(name='layerIndex', description='',subtype='NONE', options={'HIDDEN'}, default=0)
 
 	def execute(self, context):
@@ -405,6 +468,10 @@ class panelLayers(bpy.types.Panel):
 		# Import Button
 		row = layout.row()
 		row.operator(importFile.bl_idname, text="Import Image", icon="CONSOLE")
+
+		# New Paint Layer Button
+		row = layout.row()
+		row.operator(newEmptyPaintLayer.bl_idname, text="New Paint Layer", icon="CONSOLE")
 
 		# Paint Button
 		row = layout.row()
@@ -509,6 +576,7 @@ def register():
 
 	# Functionality
 	bpy.utils.register_class(importFile)
+	bpy.utils.register_class(newEmptyPaintLayer)
 	bpy.utils.register_class(paintMask)
 	bpy.utils.register_class(makeUnique)
 	bpy.utils.register_class(makeSequence)
@@ -520,8 +588,6 @@ def register():
 	bpy.utils.register_class(layerInvertMask)
 
 	# Variables
-
-	bpy.types.Object.prettyName = bpy.props.StringProperty(name='stringPrettyName',description='',subtype='NONE',options=set(),default='')
 	bpy.types.Object.layerIndex = bpy.props.IntProperty(name='layerIndex',description='',subtype='NONE',options=set(), default=0)
 
 def unregister():
@@ -533,6 +599,7 @@ def unregister():
 
 	# Functionality
 	bpy.utils.unregister_class(importFile)
+	bpy.utils.unregister_class(newEmptyPaintLayer)
 	bpy.utils.unregister_class(paintMask)
 	bpy.utils.unregister_class(makeUnique)
 	bpy.utils.unregister_class(makeSequence)
@@ -545,7 +612,6 @@ def unregister():
 
 	# Variables
 
-	del bpy.types.Object.prettyName
 	del bpy.types.Object.layerIndex
 
 if __name__ == "__main__":
