@@ -51,8 +51,8 @@ def createMattePainterCollection():
 		collection = findLayerCollectionByName("MattePainter", bpy.context.view_layer.layer_collection)
 		bpy.context.view_layer.active_layer_collection = collection
 
-def alignToCamera(target, image, camera, scene):
-	# Correctly adjusts the Aspect Ratio of the Plane to match the Image Dimensions.
+def setDimensions(target, image, camera, scene):
+	# Correctly adjusts the Aspect Ratio of the Plane to match the Image Dimensions & rotates it to face the Camera.
 	view_frame = camera.data.view_frame(scene=scene)
 	frame_size = Vector([max(v[i] for v in view_frame) for i in range(3)]) - Vector([min(v[i] for v in view_frame) for i in range(3)])
 	camera_aspect = frame_size.x / frame_size.y
@@ -65,10 +65,10 @@ def alignToCamera(target, image, camera, scene):
 
 	if image.size[0] > image.size[1]:
 	    ratio = image.size[1] / image.size[0]
-	    target.scale = (1.0, ratio, 1.0) # Might need to add Apply Scale?
+	    target.scale = (1.0, ratio, 1.0)
 	else:
 	    ratio = image.size[0] / image.size[1]
-	    target.scale = (ratio, 1.0, 1.0) # Might need to add Apply Scale?
+	    target.scale = (ratio, 1.0, 1.0)
 
 def addMask(name, width, height):
 	mask = bpy.data.images.new(name=name, width=width, height=height)
@@ -103,6 +103,8 @@ def setShaders(nodes, links, image_file, mask=None, isPaintLayer=False):
 	node_HSV.name = 'HSV'	
 	node_opacity.name = 'opacity'	
 	node_albedo.name = 'albedo'
+	node_mix.name = 'mix'
+	node_invert.name = 'invert'
 
 	# Default Values
 	node_invert.mute = True
@@ -122,6 +124,7 @@ def setShaders(nodes, links, image_file, mask=None, isPaintLayer=False):
 		nodes.active = node_mask	
 
 	node_noise.inputs[2].default_value = 1000000.0
+	node_opacity.inputs[0].default_value = 1.0
 	node_mixRGB.blend_type = "MIX"
 	node_mixRGB.inputs[0].default_value = 0.0
 	node_overlayRGB.blend_type = "OVERLAY"
@@ -212,7 +215,7 @@ class importFile(bpy.types.Operator, ImportHelper):
 		scene = bpy.context.scene
 
 		active_object.rotation_euler = camera.rotation_euler
-		alignToCamera(target=active_object, image=image, camera=camera, scene=scene)
+		setDimensions(target=active_object, image=image, camera=camera, scene=scene)
 
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
@@ -263,7 +266,7 @@ class newEmptyPaintLayer(bpy.types.Operator):
 		scene = bpy.context.scene
 
 		active_object.rotation_euler = camera.rotation_euler
-		alignToCamera(target=active_object, image=image, camera=camera, scene=scene)
+		setDimensions(target=active_object, image=image, camera=camera, scene=scene)
 
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
@@ -274,12 +277,8 @@ class newEmptyPaintLayer(bpy.types.Operator):
 		nodes = material.node_tree.nodes
 		links = material.node_tree.links
 
-		setShaders(nodes=nodes, links=links, image_file=image, mask=None, isPaintLayer=True) # Use image as mask
+		setShaders(nodes=nodes, links=links, image_file=image, mask=None, isPaintLayer=True)
 
-		# create plane
-		# position & scale
-		# create blank image file
-		# call set shaders & use the generated image file 
 		return {'FINISHED'}
 
 class paintMask(bpy.types.Operator):
@@ -324,6 +323,29 @@ class makeUnique(bpy.types.Operator):
 			node_mask.image = new_mask
 
 		return {'FINISHED'}		
+
+class moveToCamera(bpy.types.Operator):
+	# Moves the plane in front of the camera and re-aligns it.
+	bl_idname = "mattepainter.move_to_camera"
+	bl_label = "Moves the plane in front of the camera and re-aligns it."
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Moves the plane in front of the camera and re-aligns it"
+
+	def execute(self, context):
+		active_object = bpy.context.active_object
+		if active_object.users_collection[0] == bpy.data.collections['MattePainter']:
+			camera = bpy.context.scene.camera
+			
+			focal_length = camera.data.lens 
+			distance_per_mm = 0.0452
+			limit_distance = distance_per_mm * focal_length
+
+			constraint = active_object.constraints.new(type="LIMIT_DISTANCE")
+			constraint.target = camera
+			constraint.distance = limit_distance 
+			bpy.ops.constraint.apply(constraint=constraint.name)
+
+		return {'FINISHED'}	
 
 class makeSequence(bpy.types.Operator):
 	# Converts an imported image into a Sequence.
@@ -446,11 +468,46 @@ class layerInvertMask(bpy.types.Operator):
 
 		material = objects[self.layerIndex].data.materials[0]
 		nodes = material.node_tree.nodes
-		node_mask = nodes.get('Invert')
+		node_mask = nodes.get('invert')
 		if node_mask.mute:
 			node_mask.mute = False
 		else:
 			node_mask.mute = True
+		return {'FINISHED'}	
+
+class layerShowMask(bpy.types.Operator):
+	bl_idname = "mattepainter.show_mask"
+	bl_label = "Displays Transparency Mask"
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Toggles displaying the Transparency Mask for the Layer"
+	layerIndex: bpy.props.IntProperty(name='layerIndex', description='',subtype='NONE', options={'HIDDEN'}, default=0)
+
+	def execute(self, context):
+		objects = bpy.data.collections[r"MattePainter"].objects 
+
+		material = objects[self.layerIndex].data.materials[0]
+		nodes = material.node_tree.nodes
+		links = material.node_tree.links
+
+		mask = nodes.get("transparency_mask")
+		albedo = nodes.get("albedo")
+		curves = nodes.get("curves")
+		opacity = nodes.get("opacity")
+		mix = nodes.get("mix")
+		invert = nodes.get("invert")
+		
+		if mask.outputs[0].links[0].to_node.name == "invert":
+			links.remove(mask.outputs[0].links[0])
+			links.remove(albedo.outputs[0].links[0])
+			links.remove(opacity.outputs[0].links[0])
+			mix.inputs[0].default_value = 1.0
+			link = links.new(mask.outputs[0], curves.inputs[1])
+		else:
+			links.remove(mask.outputs[0].links[0])
+			link = links.new(mask.outputs[0], invert.inputs[1])
+			link = links.new(albedo.outputs[0], curves.inputs[1])
+			link = links.new(opacity.outputs[0], mix.inputs[0])
+		
 		return {'FINISHED'}	
 
 #--------------------------------------------------------------
@@ -478,17 +535,16 @@ class panelLayers(bpy.types.Panel):
 	def draw(self, context):
 		layout = self.layout
 
-		# Import Button
+		# Import, Empty Layer & Paint Buttons
 		row = layout.row()
-		row.operator(importFile.bl_idname, text="Import Image", icon="CONSOLE")
+		row.operator(importFile.bl_idname, text="Import", icon="FILE_IMAGE")
+		row.operator(newEmptyPaintLayer.bl_idname, text="New Layer", icon="FILE_NEW")
+		row.operator(paintMask.bl_idname, text="Paint", icon="BRUSH_DATA")
 
-		# New Paint Layer Button
+		# Make Unique & Move To Camera
 		row = layout.row()
-		row.operator(newEmptyPaintLayer.bl_idname, text="New Empty Layer", icon="CONSOLE")
-
-		# Paint Button
-		row = layout.row()
-		row.operator(paintMask.bl_idname, text="Paint", icon="CONSOLE")
+		row.operator(makeUnique.bl_idname, text="Make Unique", icon="DUPLICATE")
+		row.operator(moveToCamera.bl_idname, text="Move to Camera", icon="OUTLINER_OB_CAMERA")
 
 		if bpy.data.collections.find(r"MattePainter") != -1 and len(bpy.data.collections[r"MattePainter"].objects) > 0:
 			box = layout.box()
@@ -503,15 +559,21 @@ class panelLayers(bpy.types.Panel):
 				row.scale_x = 1.0
 				row.scale_y = 0.85
 
-				opSelect = row.operator(layerSelect.bl_idname, text=bpy.data.collections[r"MattePainter"].objects[i].name, emboss=False, depress=False, icon_value=0) 
-				opVisible = row.operator(layerVisibility.bl_idname, text="", emboss=False, depress=True, icon_value=253 if bpy.data.collections[r"MattePainter"].objects[i].hide_render else 254)	
-				opLock = row.operator(layerLock.bl_idname, text="", emboss=False, depress=True, icon_value=41 if bpy.data.collections[r"MattePainter"].objects[i].hide_select else 224)	
-				opInvertMask = row.operator(layerInvertMask.bl_idname, text="", emboss=False, depress=True, icon='CLIPUV_HLT' if bpy.data.collections[r"MattePainter"].objects[i].data.materials[0].node_tree.nodes.get('Invert').mute else 'CLIPUV_DEHLT')	
+				layer_object = bpy.data.collections[r"MattePainter"].objects[i]
+				layer_nodes = layer_object.data.materials[0].node_tree.nodes
+
+				opSelect = row.operator(layerSelect.bl_idname, text=layer_object.name, emboss=False, depress=False, icon_value=0) 
+				opVisible = row.operator(layerVisibility.bl_idname, text="", emboss=False, depress=True, icon_value=253 if layer_object.hide_render else 254)	
+				opLock = row.operator(layerLock.bl_idname, text="", emboss=False, depress=True, icon_value=41 if layer_object.hide_select else 224)	
+				opInvertMask = row.operator(layerInvertMask.bl_idname, text="", emboss=False, depress=True, icon='CLIPUV_HLT' if layer_nodes.get('invert').mute else 'CLIPUV_DEHLT')	
+				if not layer_nodes.get('transparency_mask') == None:
+					opShowMask = row.operator(layerShowMask.bl_idname, text="", emboss=False, depress=True, icon='IMAGE_ALPHA' if layer_nodes.get('transparency_mask').outputs[0].links[0].to_node.name == 'invert' else 'IMAGE_RGB')	
 
 				opSelect.layerIndex = i
 				opVisible.layerIndex = i
 				opLock.layerIndex = i
 				opInvertMask.layerIndex = i
+				opShowMask.layerIndex = i
 
 
 class panelFileManagement(bpy.types.Panel):
@@ -528,28 +590,18 @@ class panelFileManagement(bpy.types.Panel):
 		# Save All Button
 		row = layout.row()
 		row.operator(saveAllImages.bl_idname, text="Save All", icon_value=727)
+		row.operator(clearUnused.bl_idname, text="Clear Unused", icon_value=21)
 
 		# Make Sequence 
 		if (not bpy.context.active_object == None and bpy.context.active_object.users_collection[0] == bpy.data.collections['MattePainter']):
 			if bpy.context.active_object.data.materials[0].node_tree.nodes.get('albedo').image.source == 'FILE':
-				row = layout.row()
-				row.operator(makeSequence.bl_idname, text='Convert To Sequence', icon="CONSOLE")
-
-		# Make Unique
-		row = layout.row()
-		row.operator(makeUnique.bl_idname, text="Make Unique", icon="CONSOLE")
-
-		# Clear Unused
-		row = layout.row()
-		row.operator(clearUnused.bl_idname, text="Clear Unused", icon_value=21)
+				row.operator(makeSequence.bl_idname, text='To Sequence', icon="SEQUENCE")
 
 		# Cycles Layers
 		row = layout.row()
+		row.prop(bpy.context.scene.view_settings,'view_transform',icon_value=54, text=r"Color", emboss=True, expand=False,)
 		row.prop(bpy.context.scene.cycles,'transparent_max_bounces', text=r"Cycles Layers:", emboss=True, slider=False,)
-
-		# Colour Space
-		row = layout.row()
-		layout.prop(bpy.context.scene.view_settings,'view_transform',icon_value=54, text=r"Color Space", emboss=True, expand=False,)
+		
 
 class panelColorGrade(bpy.types.Panel):
 	bl_label = "Color Grade"
@@ -599,6 +651,8 @@ def register():
 	bpy.utils.register_class(layerVisibility)
 	bpy.utils.register_class(layerLock)
 	bpy.utils.register_class(layerInvertMask)
+	bpy.utils.register_class(layerShowMask)
+	bpy.utils.register_class(moveToCamera)
 
 	# Variables
 	bpy.types.Object.layerIndex = bpy.props.IntProperty(name='layerIndex',description='',subtype='NONE',options=set(), default=0)
@@ -622,6 +676,8 @@ def unregister():
 	bpy.utils.unregister_class(layerVisibility)
 	bpy.utils.unregister_class(layerLock)
 	bpy.utils.unregister_class(layerInvertMask)
+	bpy.utils.unregister_class(layerShowMask)
+	bpy.utils.unregister_class(moveToCamera)
 
 	# Variables
 
