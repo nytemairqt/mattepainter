@@ -560,7 +560,7 @@ class panelMain(bpy.types.Panel):
 	bl_idname = "MATTEPAINTER_PT_panelMain"
 	bl_space_type = 'VIEW_3D'
 	bl_region_type = 'UI'
-	bl_category = 'MattePainter 2'
+	bl_category = 'MattePainter'
 
 	def draw(self, context):
 		layout = self.layout		
@@ -570,7 +570,7 @@ class panelLayers(bpy.types.Panel):
 	bl_idname = "MATTEPAINTER_PT_panelLayers"
 	bl_space_type = 'VIEW_3D'
 	bl_region_type = 'UI'
-	bl_category = 'MattePainter 2'
+	bl_category = 'MattePainter'
 	bl_parent_id = 'MATTEPAINTER_PT_panelMain'
 
 	def draw(self, context):
@@ -627,7 +627,7 @@ class panelFileManagement(bpy.types.Panel):
 	bl_idname = "MATTEPAINTER_PT_panelFileManagement"
 	bl_space_type = 'VIEW_3D'
 	bl_region_type = 'UI'
-	bl_category = 'MattePainter 2'
+	bl_category = 'MattePainter'
 	bl_parent_id = 'MATTEPAINTER_PT_panelMain'
 
 	def draw(self, context):
@@ -654,7 +654,7 @@ class panelColorGrade(bpy.types.Panel):
 	bl_idname = "MATTEPAINTER_PT_panelColorGrade"
 	bl_space_type = 'VIEW_3D'
 	bl_region_type = 'UI'
-	bl_category = 'MattePainter 2'
+	bl_category = 'MattePainter'
 	bl_parent_id = 'MATTEPAINTER_PT_panelMain'
 
 	def draw(self, context):
