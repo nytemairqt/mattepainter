@@ -26,6 +26,7 @@ import mathutils
 from bpy_extras.image_utils import load_image
 from pathlib import Path
 import shutil
+from bpy_extras import view3d_utils
 from bpy_extras.io_utils import ImportHelper
 
 #--------------------------------------------------------------
@@ -183,7 +184,7 @@ class importFile(bpy.types.Operator, ImportHelper):
 	bl_options = {"REGISTER"}
 
 	filter_glob: bpy.props.StringProperty(
-			default='*.jpg;*.jpeg;*.png;*.tif;*.tiff;*.bmp;*.avi;*.mp4;*.mov;*.webm;',
+			default='*.jpg;*.jpeg;*.png;*.tif;*.tiff;*.bmp;*.avi;*.mp4;*.mov;*.webm;*.mkv;',
 			options={'HIDDEN'}
 		)
 
@@ -510,6 +511,46 @@ class layerShowMask(bpy.types.Operator):
 		
 		return {'FINISHED'}	
 
+class selectionLasso(bpy.types.Operator):
+	# Not Implemented
+	bl_idname = "mattepainter.select_lasso"
+	bl_label = "Selects pixels using a Lasso-style selection"
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Selects pixels using a Lasso-style selection"
+
+	@classmethod
+	def poll(cls, context):
+		return context.mode in ['PAINT_TEXTURE']
+
+	def modal(self, context:bpy.types.Context, event:bpy.types.Event):
+		if event.type == 'LEFTMOUSE':
+			mouse_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
+			region = bpy.context.region 
+			region_data = bpy.context.region_data
+			ray_vector = view3d_utils.region_2d_to_vector_3d(region, region_data, mouse_position)
+			ray_origin = view3d_utils.region_2d_to_origin_3d(region, region_data, mouse_position)
+			direction = ray_origin + (ray_vector * 1000)
+			direction -= ray_origin
+			result, location, normal, index, obj, matrix = bpy.context.scene.ray_cast(bpy.context.view_layer.depsgraph, ray_origin, direction)
+
+			print('________________________________')
+			print(f'Ray Origin: {ray_origin}')
+			print(f'Ray Vector: {ray_vector}')
+			print(f'Direction: {direction}')
+			print(f'Result: {result}')
+			print(f'Location: {location}')
+			print(f'Matrix: {matrix}')		
+
+		elif event.type in {'RIGHTMOUSE', 'ESC'}:
+			return {'FINISHED'}
+
+		return {'RUNNING_MODAL'}
+
+	def invoke(self, context, event):
+		context.window_manager.modal_handler_add(self)
+		return {'RUNNING_MODAL'}
+
+
 #--------------------------------------------------------------
 # Interface
 #--------------------------------------------------------------
@@ -545,6 +586,11 @@ class panelLayers(bpy.types.Panel):
 		row = layout.row()
 		row.operator(makeUnique.bl_idname, text="Make Unique", icon="DUPLICATE")
 		row.operator(moveToCamera.bl_idname, text="Move to Camera", icon="OUTLINER_OB_CAMERA")
+
+		# Selection Tools
+		# Not Implemented
+		#row = layout.row()
+		#row.operator(selectionLasso.bl_idname, text="Lasso Select", icon="CONSOLE")
 
 		if bpy.data.collections.find(r"MattePainter") != -1 and len(bpy.data.collections[r"MattePainter"].objects) > 0:
 			box = layout.box()
@@ -654,6 +700,8 @@ def register():
 	bpy.utils.register_class(layerShowMask)
 	bpy.utils.register_class(moveToCamera)
 
+	bpy.utils.register_class(selectionLasso)
+
 	# Variables
 	bpy.types.Object.layerIndex = bpy.props.IntProperty(name='layerIndex',description='',subtype='NONE',options=set(), default=0)
 
@@ -678,6 +726,8 @@ def unregister():
 	bpy.utils.unregister_class(layerInvertMask)
 	bpy.utils.unregister_class(layerShowMask)
 	bpy.utils.unregister_class(moveToCamera)
+
+	bpy.utils.unregister_class(selectionLasso)
 
 	# Variables
 
