@@ -739,6 +739,8 @@ class panelColorGrade(bpy.types.Panel):
 			box.prop(bpy.context.active_object.data.materials[0].node_tree.nodes[r"HSV"].inputs[2], 'default_value', text=r"Value", emboss=True, slider=True)
 
 
+addon_keymaps = []
+
 #--------------------------------------------------------------
 # Register 
 #--------------------------------------------------------------
@@ -771,6 +773,15 @@ def register():
 	# Variables
 	bpy.types.Object.layerIndex = bpy.props.IntProperty(name='layerIndex',description='',subtype='NONE',options=set(), default=0)
 
+	# Keymaps
+	wm = bpy.context.window_manager
+	kc = wm.keyconfigs.addon 
+	if kc:
+		km = kc.keymaps.new(name='3D View', space_type='VIEW_3D')
+		kmi = km.keymap_items.new(newLayerFromClipboard.bl_idname, type='V', value='PRESS', shift=True, ctrl=True)
+		addon_keymaps.append((km, kmi))
+
+
 def unregister():
 	# Interface
 	bpy.utils.unregister_class(panelMain)
@@ -799,6 +810,12 @@ def unregister():
 	# Variables
 
 	del bpy.types.Object.layerIndex
+
+	# Keymaps
+	for km, kmi in addon_keymaps:
+		km.keymap_items.remove(kmi)
+
+	addon_keymaps.clear()
 
 if __name__ == "__main__":
 	register()
