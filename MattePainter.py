@@ -28,6 +28,7 @@ from pathlib import Path
 import shutil
 from bpy_extras import view3d_utils
 from bpy_extras.io_utils import ImportHelper
+from PIL import Image
 
 #--------------------------------------------------------------
 # Functionality
@@ -281,6 +282,67 @@ class newEmptyPaintLayer(bpy.types.Operator):
 		setShaders(nodes=nodes, links=links, image_file=image, mask=None, isPaintLayer=True)
 
 		return {'FINISHED'}
+
+class newLayerFromClipboard(bpy.types.Operator):
+	bl_idname = "mattepainter.new_layer_from_clipboard"
+	bl_label = "Imports an image directly from the Clipboard."
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Imports an image directly from the Clipboard"
+
+	def execute(self, context):
+		camera = bpy.context.scene.camera
+		if not camera: # Safety Check
+			bpy.ops.object.camera_add(enter_editmode=False, align='VIEW', location=(0, 0, 0), rotation=(0, 0, 0), scale=(1, 1, 1))
+		camera = bpy.context.scene.camera
+
+		# Create Collection
+		createMattePainterCollection()	
+
+		# Paste Image
+		for window in context.window_manager.windows:
+		    screen = window.screen
+		    for area in screen.areas:
+		        if area.type == 'VIEW_3D':
+		        	area.type = 'IMAGE_EDITOR'
+		        	try:
+		        		bpy.ops.image.clipboard_paste()
+		        	except:
+		        		area.type='VIEW_3D'
+		        		return{'CANCELLED'}
+		        	else:
+		        		image = area.spaces.active.image   
+		        		area.type='VIEW_3D'   
+		        	break
+
+		# Mask Generation
+		mask_name = "mask_" + image.name
+		mask = addMask(name=mask_name, width=image.size[0], height=image.size[1])		
+
+		# Geometry and Alignment
+		bpy.ops.mesh.primitive_plane_add(enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
+		bpy.ops.object.mode_set(mode="EDIT")
+		bpy.ops.mesh.subdivide(number_cuts=1)
+		bpy.ops.object.mode_set(mode="OBJECT")
+
+		active_object = bpy.context.active_object
+		active_object.name = image.name
+		scene = bpy.context.scene
+
+		active_object.rotation_euler = camera.rotation_euler
+		setDimensions(target=active_object, image=image, camera=camera, scene=scene)
+
+		# Shader Setup
+		material = bpy.data.materials.new(name=image.name)
+		active_object.data.materials.append(material)
+		material.blend_method = "BLEND"
+		material.shadow_method = "CLIP"
+		material.use_nodes = True
+		nodes = material.node_tree.nodes
+		links = material.node_tree.links
+
+		setShaders(nodes=nodes, links=links, image_file=image, mask=mask, isPaintLayer=False)	
+
+		return {'FINISHED'}		
 
 class paintMask(bpy.types.Operator):
 	# Switches to Texture Paint Mode.
@@ -579,6 +641,9 @@ class panelLayers(bpy.types.Panel):
 		# Import, Empty Layer & Paint Buttons
 		row = layout.row()
 		row.operator(importFile.bl_idname, text="Import", icon="FILE_IMAGE")
+		row.operator(newLayerFromClipboard.bl_idname, text="Paste Clipboard", icon="PASTEDOWN")
+		
+		row = layout.row()
 		row.operator(newEmptyPaintLayer.bl_idname, text="New Layer", icon="FILE_NEW")
 		row.operator(paintMask.bl_idname, text="Paint", icon="BRUSH_DATA")
 
@@ -688,6 +753,7 @@ def register():
 	# Functionality
 	bpy.utils.register_class(importFile)
 	bpy.utils.register_class(newEmptyPaintLayer)
+	bpy.utils.register_class(newLayerFromClipboard)
 	bpy.utils.register_class(paintMask)
 	bpy.utils.register_class(makeUnique)
 	bpy.utils.register_class(makeSequence)
@@ -715,6 +781,7 @@ def unregister():
 	# Functionality
 	bpy.utils.unregister_class(importFile)
 	bpy.utils.unregister_class(newEmptyPaintLayer)
+	bpy.utils.unregister_class(newLayerFromClipboard)
 	bpy.utils.unregister_class(paintMask)
 	bpy.utils.unregister_class(makeUnique)
 	bpy.utils.unregister_class(makeSequence)
