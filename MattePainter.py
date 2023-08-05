@@ -5,7 +5,7 @@
 bl_info = {
 	"name" : "MattePainter",
 	"author" : "SceneFiller",
-	"version" : (1, 0, 5),
+	"version" : (1, 0, 6),
 	"blender" : (3, 3, 0),
 	"location" : "View3d > Tool",
 	"warning" : "",
@@ -345,118 +345,6 @@ class MATTEPAINTER_OT_newLayerFromClipboard(bpy.types.Operator):
 		self.report({"INFO"}, "Imported Clipboard.")	
 		return {'FINISHED'}		
 
-class MATTEPAINTER_OT_wrapTarget(bpy.types.Operator):
-	# Wraps the image around an instance of the target mesh, effectively creating a Decal.
-	bl_idname = "mattepainter.wrap_target"
-	bl_label = "Wraps the image around an instance of the target mesh, effectively creating a Decal."
-	bl_options = {"REGISTER", "UNDO"}
-	bl_description = "Wraps the image onto the Target Mesh as a Projection. Warning: Do not use on extremely dense Geometry such as Photoscans."
-
-	def execute(self, context):		
-
-		active_object = bpy.context.active_object
-		target = bpy.context.scene.MATTEPAINTER_VAR_wrapTarget
-
-		if not bpy.context.active_object.users_collection[0] == bpy.data.collections['MattePainter'] or not active_object.type == 'MESH':
-			self.report({"WARNING"}, "Active Object is not a MattePainter layer.")	
-			return{'CANCELLED'}		
-
-		if not target.type == 'MESH':
-			self.report({"WARNING"}, "Target Object is not a Projectable Mesh.")	
-			return{'CANCELLED'}
-
-		if target is not None:
-			# Add a camera and point it at the Projection
-			old_camera = bpy.context.scene.camera
-			projection = bpy.context.active_object
-			bpy.ops.object.select_all(action='DESELECT')
-			bpy.ops.object.camera_add(enter_editmode=False, align='VIEW', location=(0, 0, 0), rotation=(0, 0, 0), scale=(1, 1, 1)) 
-			bpy.context.scene.camera = bpy.context.active_object # Our camera is the new AO
-			projection_camera = bpy.context.active_object
-			projection_camera.rotation_euler = projection.rotation_euler
-
-			# Jump to camera View
-			for area in bpy.context.screen.areas:
-			    if area.type == 'VIEW_3D':
-			    	if not area.spaces[0].region_3d.view_perspective == 'CAMERA':
-			        	area.spaces[0].region_3d.view_perspective = 'CAMERA'	
-
-			bpy.ops.object.select_all(action='DESELECT')
-			bpy.context.view_layer.objects.active = projection
-			projection.select_set(True)		
-
-			# Cast Faces Through Target
-			if not projection.mode == 'EDIT':
-				bpy.ops.object.mode_set(mode='EDIT')
-			bpy.ops.mesh.select_mode(type='FACE')
-			bpy.ops.mesh.select_all(action='SELECT')
-			current_transform_type = bpy.context.scene.transform_orientation_slots[0].type
-			bpy.context.scene.transform_orientation_slots[0].type = 'LOCAL' # Local Axis
-			bpy.ops.mesh.extrude_region_move(MESH_OT_extrude_region={"use_normal_flip":False, "use_dissolve_ortho_edges":False, "mirror":False}, TRANSFORM_OT_translate={"value":(0, 0, -100), "constraint_axis":(False, False, True), "cursor_transform":False})
-			bpy.context.scene.transform_orientation_slots[0].type = current_transform_type
-			bpy.ops.object.mode_set(mode='OBJECT')
-			bpy.ops.object.select_all(action='DESELECT')
-
-			# Duplicate the Target Mesh			
-			bpy.context.view_layer.objects.active = target
-			target.select_set(True)
-			bpy.ops.object.duplicate()
-
-			# Add and Apply Boolean to Target
-			active_object = bpy.context.active_object
-			boolean = active_object.modifiers.new(name="Boolean_Projection", type="BOOLEAN")
-			boolean.object = projection
-			boolean.operation = 'INTERSECT'
-			boolean.solver = 'FAST'
-			bpy.ops.object.modifier_apply(modifier=boolean.name)
-			
-			# Replace Material with Image Texture Setup
-			active_object.data.materials.clear()
-			projection_material = projection.data.materials[0]
-			active_object.data.materials.append(projection_material)
-
-			# View Projection with Bounds			
-			bpy.ops.view3d.camera_to_view_selected()
-			if not active_object.mode == 'EDIT':
-				bpy.ops.object.mode_set(mode='EDIT')
-			bpy.ops.mesh.select_mode(type='FACE')
-			bpy.ops.mesh.select_all(action='SELECT')
-			bpy.ops.uv.project_from_view(scale_to_bounds=True) 
-			bpy.ops.object.mode_set(mode='OBJECT')
-
-			# Scale Projected Mesh Up Slightly to Avoid Overlap
-			bpy.ops.transform.resize(value=(1.001, 1.001, 1.001), orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), orient_matrix_type='GLOBAL', mirror=False, use_proportional_edit=False)
-
-			# Parent Target to Original and Make It Non-Selectable
-			projected_mesh = active_object
-			bpy.ops.object.select_all(action='DESELECT')
-			projected_mesh.select_set(True)
-			target.select_set(True)
-			bpy.context.view_layer.objects.active = target
-			active_object = bpy.context.active_object
-			bpy.ops.object.parent_set(type='OBJECT', keep_transform=True)
-
-			# Make Generated Mesh Non-Selectable
-			bpy.ops.object.select_all(action='DESELECT')
-			projected_mesh.hide_select = True			
-
-			# Revert Projection Back Into Plane
-			projection.select_set(True)
-			bpy.context.view_layer.objects.active = projection
-			bpy.ops.object.mode_set(mode='EDIT')
-			bpy.ops.mesh.delete(type='VERT')
-			bpy.ops.object.mode_set(mode='OBJECT')
-			bpy.ops.object.select_all(action='DESELECT')
-
-			# Delete generated Camera 
-			bpy.data.objects.remove(projection_camera)
-
-			# Restore Original Camera as Active
-			bpy.context.scene.camera = old_camera		
-
-			self.report({"INFO"}, "Projection successful.")		
-		return {'FINISHED'}		
-
 #--------------------------------------------------------------
 # Layer Functions
 #--------------------------------------------------------------		
@@ -774,11 +662,6 @@ class MATTEPAINTER_PT_panelLayers(bpy.types.Panel):
 		row.operator(MATTEPAINTER_OT_makeUnique.bl_idname, text="Make Unique", icon="DUPLICATE")
 		row.operator(MATTEPAINTER_OT_moveToCamera.bl_idname, text="To Camera", icon="OUTLINER_OB_CAMERA")
 
-		# Wrap To Mesh
-		row = layout.row()
-		row.operator(MATTEPAINTER_OT_wrapTarget.bl_idname, text="Wrap To Mesh", icon="MOD_SHRINKWRAP")
-		row.prop(scene, "MATTEPAINTER_VAR_wrapTarget")
-
 		# Selection Tools
 		# Not Implemented
 		#row = layout.row()
@@ -890,7 +773,6 @@ def register():
 	bpy.utils.register_class(MATTEPAINTER_OT_newLayerFromClipboard)
 	bpy.utils.register_class(MATTEPAINTER_OT_paintMask)
 	bpy.utils.register_class(MATTEPAINTER_OT_makeUnique)
-	bpy.utils.register_class(MATTEPAINTER_OT_wrapTarget)
 	bpy.utils.register_class(MATTEPAINTER_OT_makeSequence)
 	bpy.utils.register_class(MATTEPAINTER_OT_saveAllImages)
 	bpy.utils.register_class(MATTEPAINTER_OT_clearUnused)
@@ -905,7 +787,6 @@ def register():
 
 	# Variables
 	bpy.types.Object.MATTEPAINTER_VAR_layerIndex = bpy.props.IntProperty(name='MATTEPAINTER_VAR_layerIndex',description='',subtype='NONE',options=set(), default=0)
-	bpy.types.Scene.MATTEPAINTER_VAR_wrapTarget = PointerProperty(type=bpy.types.Object, name="Target")
 
 	# Keymaps
 	wm = bpy.context.window_manager
@@ -929,7 +810,6 @@ def unregister():
 	bpy.utils.unregister_class(MATTEPAINTER_OT_newLayerFromClipboard)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_paintMask)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_makeUnique)
-	bpy.utils.unregister_class(MATTEPAINTER_OT_wrapTarget)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_makeSequence)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_saveAllImages)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_clearUnused)
@@ -945,7 +825,6 @@ def unregister():
 	# Variables
 
 	del bpy.types.Object.MATTEPAINTER_VAR_layerIndex
-	del bpy.types.Scene.MATTEPAINTER_VAR_wrapTarget
 
 	# Keymaps
 	for km, kmi in addon_keymaps:
