@@ -172,6 +172,45 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	if not mask == None:
 		node_mask.location = Vector((-1100.0, 200.0))
 
+
+def MATTEPAINTER_FN_rayCast(mouse_x, context_x, mouse_y, context_y):
+	mouse_position = Vector(((mouse_x) - context_x, mouse_y - context_y))
+	region = bpy.context.region 
+	region_data = bpy.context.region_data
+	ray_vector = view3d_utils.region_2d_to_vector_3d(region, region_data, mouse_position)
+	ray_origin = view3d_utils.region_2d_to_origin_3d(region, region_data, mouse_position)
+	direction = ray_origin + (ray_vector * 1000)
+	direction -= ray_origin
+	result, location, normal, index, obj, matrix = bpy.context.scene.ray_cast(bpy.context.view_layer.depsgraph, ray_origin, direction)
+
+	return result, location, normal, index, obj, matrix
+
+def MATTEPAINTER_FN_convertToStroke(name, is_start, location, brush_size, time):
+	stroke = {"name": name,
+				"is_start": is_start,
+				"location": (0,0,0),
+				"mouse":location, 
+				"mouse_event":(0,0),
+				"pen_flip":False,
+				"pressure":1.0,
+				"size":brush_size,
+				"time":time,
+				"x_tilt":0.0,
+				"y_tilt":0.0}
+	return stroke
+
+def MATTEPAINTER_FN_contextOverride(area_to_check):
+	return [area for area in bpy.context.screen.areas if area.type == area_to_check][0]
+
+def MATTEPAINTER_FN_3DViewOverride():
+    for window in bpy.context.window_manager.windows:
+        screen = window.screen
+        for area in screen.areas:
+            if area.type == 'VIEW_3D':
+                for region in area.regions:
+                    if region.type == 'WINDOW':
+                        return {'window': window, 'screen': screen, 'area': area, 'region': region, 'scene': bpy.context.scene} 	
+
 #--------------------------------------------------------------
 # Layer Creation
 #--------------------------------------------------------------		
@@ -575,18 +614,47 @@ class MATTEPAINTER_OT_clearUnused(bpy.types.Operator):
 
 	def execute(self, context):
 		bpy.ops.outliner.orphans_purge('INVOKE_DEFAULT' if True else 'EXEC_DEFAULT', num_deleted=0, do_local_ids=True, do_linked_ids=False, do_recursive=True)
+		printToConsole()
 		return {'FINISHED'}
+
+class MATTEPAINTER_OT_bakeProjection(bpy.types.Operator):
+	# Bakes the Emit information from a texture into a new Image.
+	bl_idname = "mattepainter.clear_unused"
+	bl_label = "Purges unused Data Blocks."
+	bl_description = "Bakes a Window-Based UV projection into a new Texture for 3D Projections."
+	bl_options = {"REGISTER", "UNDO"}
+
+
+	def execute(self, context):
+		# IMPORTANT need to add a safety check to make sure we have an empty image selected
+		# IMPORTANT also need a safety check to make sure we're in camera view
+		# smart UV project object
+		# get node tree
+		# create an image tex node
+		# create an image file
+			# set the image resolution to current image texture (emit input)
+		# if in eevee, switch to Cycles
+		# set TextureCoord to Window, set Repeat to Clip in Image
+		# jump to CAMERA VIEW
+		# bake texture
+		# return to previous view, return to previous Render Engine
+		# 
+		return{'FINISHED'}
 
 #--------------------------------------------------------------
 # ____NOT_IMPLEMENTED
 #--------------------------------------------------------------
 
-class MATTEPAINTER_OT_selectionLasso(bpy.types.Operator):
+class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 	# Not Implemented
 	bl_idname = "mattepainter.select_lasso"
-	bl_label = "Selects pixels using a Lasso-style selection"
+	bl_label = "Selects pixels using a Marquee-style selection"
 	bl_options = {"REGISTER", "UNDO"}
-	bl_description = "Selects pixels using a Lasso-style selection"
+	bl_description = "Selects pixels using a Marquee-style selection"
+
+	click_counter = 0 # 0 for first mouse_down event, 1 for mouse_up
+	strokes = []
+	mouse_positions = []
 
 	@classmethod
 	def poll(cls, context):
@@ -594,22 +662,91 @@ class MATTEPAINTER_OT_selectionLasso(bpy.types.Operator):
 
 	def modal(self, context:bpy.types.Context, event:bpy.types.Event):
 		if event.type == 'LEFTMOUSE':
-			mouse_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
-			region = bpy.context.region 
-			region_data = bpy.context.region_data
-			ray_vector = view3d_utils.region_2d_to_vector_3d(region, region_data, mouse_position)
-			ray_origin = view3d_utils.region_2d_to_origin_3d(region, region_data, mouse_position)
-			direction = ray_origin + (ray_vector * 1000)
-			direction -= ray_origin
-			result, location, normal, index, obj, matrix = bpy.context.scene.ray_cast(bpy.context.view_layer.depsgraph, ray_origin, direction)
 
-			print('________________________________')
-			print(f'Ray Origin: {ray_origin}')
-			print(f'Ray Vector: {ray_vector}')
-			print(f'Direction: {direction}')
-			print(f'Result: {result}')
-			print(f'Location: {location}')
-			print(f'Matrix: {matrix}')		
+			print(f'Click Counter: {self.click_counter}')
+
+			area = MATTEPAINTER_FN_contextOverride("VIEW_3D")
+			bpy.context.temp_override(area=area)	
+
+			brush_size = bpy.context.tool_settings.unified_paint_settings.size
+
+			#MATTEPAINTER_FN_rayCast(event.mouse_x, context.area.regions.data.x, event.mouse_y, context.area.regions.data.y)
+
+
+			
+			# Mouse Down
+			if self.click_counter == 0: 
+				mouse_down_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
+				self.mouse_positions.append(mouse_down_position)
+				#stroke_down = MATTEPAINTER_FN_convertToStroke(name="stroke_down", is_start=True, location=mouse_down_position, brush_size=brush_size, time=1.0)
+				#self.strokes.append(stroke_down)
+							
+			# Mouse Up
+			if self.click_counter > 0: 
+				mouse_up_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
+				self.mouse_positions.append(mouse_up_position)
+				#stroke_up = MATTEPAINTER_FN_convertToStroke(name="stroke_up", is_start=False, location=mouse_up_position, brush_size=brush_size, time=2.0)
+				#self.strokes.append(stroke_up)
+
+				#bpy.ops.paint.brush_select(vertex_tool="DRAW", toggle=False)
+				#bpy.ops.paint.image_paint(stroke=self.strokes)
+
+				#bpy.ops.paint.brush_colors_flip() # use for CTRL
+
+				if self.mouse_positions[1][0] > self.mouse_positions[0][0]:
+					marquee_width = self.mouse_positions[1][0] - self.mouse_positions[0][0]
+				else:
+					marquee_width = self.mouse_positions[0][0] - self.mouse_positions[1][0]
+
+				if self.mouse_positions[1][1] > self.mouse_positions[0][1]:
+					marquee_height = self.mouse_positions[1][1] - self.mouse_positions[0][1]
+				else:
+					marquee_height = self.mouse_positions[0][1] - self.mouse_positions[1][1]
+
+				print(f"Width: {marquee_width}")
+				print(f"Height: {marquee_height}")
+
+				
+
+				for i in range(int(marquee_height)):
+					for j in range(int(marquee_width)):
+						stroke = MATTEPAINTER_FN_convertToStroke(name=f"stroke{i}", is_start=True if i==0 else False, location=(self.mouse_positions[0][0]+j, self.mouse_positions[0][1]-i), brush_size=1, time=i)
+						self.strokes.append(stroke)
+					print("Painted horizontal line")
+
+				bpy.ops.paint.brush_select(vertex_tool="DRAW", toggle=False)
+				bpy.ops.paint.image_paint(stroke=self.strokes)
+
+				return{'FINISHED'}
+
+			self.click_counter += 1				
+
+			
+
+			#print('________________________________')
+			#print(f'Ray Origin: {ray_origin}')
+			#print(f'Ray Vector: {ray_vector}')
+			#print(f'Direction: {direction}')
+			#print(f'Result: {result}')
+			#print(f'Location: {location}')
+
+			# CONFIRMED: calling twice on mouse down and up
+
+
+
+			'''
+			
+			Ray Origin: <Vector (1.0497, -499.9999, -0.7102)>
+			Ray Vector: <Vector (-0.0000, 1.0000, 0.0000)>
+			Direction: <Vector (0.0000, 1000.0000, 0.0001)>
+			Result: False
+			Location: <Vector (0.0000, 0.0000, 0.0000)>
+			Matrix: <Matrix 4x4 (1.0000, 0.0000, 0.0000, 0.0000)
+			            (0.0000, 1.0000, 0.0000, 0.0000)
+			            (0.0000, 0.0000, 1.0000, 0.0000)
+			            (0.0000, 0.0000, 0.0000, 1.0000)>
+
+			'''
 
 		elif event.type in {'RIGHTMOUSE', 'ESC'}:
 			return {'FINISHED'}
@@ -664,8 +801,8 @@ class MATTEPAINTER_PT_panelLayers(bpy.types.Panel):
 
 		# Selection Tools
 		# Not Implemented
-		#row = layout.row()
-		#row.operator(MATTEPAINTER_OT_selectionLasso.bl_idname, text="Lasso Select", icon="CONSOLE")
+		row = layout.row()
+		row.operator(MATTEPAINTER_OT_selectionMarquee.bl_idname, text="Marquee Select", icon="CONSOLE")
 
 		if bpy.data.collections.find(r"MattePainter") != -1 and len(bpy.data.collections[r"MattePainter"].objects) > 0:
 			box = layout.box()
@@ -783,7 +920,7 @@ def register():
 	bpy.utils.register_class(MATTEPAINTER_OT_layerShowMask)
 	bpy.utils.register_class(MATTEPAINTER_OT_moveToCamera)
 
-	bpy.utils.register_class(MATTEPAINTER_OT_selectionLasso)
+	bpy.utils.register_class(MATTEPAINTER_OT_selectionMarquee)
 
 	# Variables
 	bpy.types.Object.MATTEPAINTER_VAR_layerIndex = bpy.props.IntProperty(name='MATTEPAINTER_VAR_layerIndex',description='',subtype='NONE',options=set(), default=0)
@@ -820,7 +957,7 @@ def unregister():
 	bpy.utils.unregister_class(MATTEPAINTER_OT_layerShowMask)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_moveToCamera)
 
-	bpy.utils.unregister_class(MATTEPAINTER_OT_selectionLasso)
+	bpy.utils.unregister_class(MATTEPAINTER_OT_selectionMarquee)
 
 	# Variables
 
