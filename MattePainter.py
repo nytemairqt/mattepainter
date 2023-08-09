@@ -30,11 +30,17 @@ import shutil
 from bpy_extras import view3d_utils
 from bpy_extras.io_utils import ImportHelper
 from PIL import Image
+import time, sys
 
 # Draw Functions
 import blf
 import gpu
 from gpu_extras.batch import batch_for_shader
+
+# TO DO:
+
+# reprojection
+# bpy.ops.paint.project_image OR bpy.ops.paint.image_from_view
 
 #--------------------------------------------------------------
 # Miscellaneous Functions
@@ -190,11 +196,11 @@ def MATTEPAINTER_FN_rayCast(mouse_x, context_x, mouse_y, context_y):
 
 	return result, location, normal, index, obj, matrix
 
-def MATTEPAINTER_FN_convertToStroke(name, is_start, location, brush_size, time):
+def MATTEPAINTER_FN_convertToStroke(name, is_start=False, mouse=(0,0), brush_size=1, time=0.0):
 	stroke = {"name": name,
 				"is_start": is_start,
 				"location": (0,0,0),
-				"mouse":location, 
+				"mouse":mouse,
 				"mouse_event":(0,0),
 				"pen_flip":False,
 				"pressure":1.0,
@@ -662,6 +668,13 @@ class MATTEPAINTER_OT_bakeProjection(bpy.types.Operator):
 #--------------------------------------------------------------
 
 class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
+
+	# convert 2d to 3d (as in where on the mesh the marquee is)
+	# select material
+	# select node tree
+	# select alpha image
+	# fill pixels relative to the conversion
+
 	# Not Implemented
 	bl_idname = "mattepainter.select_marquee"
 	bl_label = "Selects pixels using a Marquee-style selection"
@@ -672,6 +685,11 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 	strokes = []
 	mouse_positions = []
 
+	def set_pixel(x, y, width, colour):
+		offset = (x + int(y*width)) * 4
+		for i in range(4):
+			image.pixels[offset+i] = colour
+
 	@classmethod
 	def poll(cls, context):
 		return context.mode in ['PAINT_TEXTURE']
@@ -679,7 +697,7 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 	def modal(self, context:bpy.types.Context, event:bpy.types.Event):
 		if event.type == 'LEFTMOUSE':
 
-			print(f'Click Counter: {self.click_counter}')
+			#print(f'Click Counter: {self.click_counter}')
 
 			area = MATTEPAINTER_FN_contextOverride("VIEW_3D")
 			bpy.context.temp_override(area=area)	
@@ -692,18 +710,11 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 			if self.click_counter == 0: 
 				mouse_down_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
 				self.mouse_positions.append(mouse_down_position)
-				#stroke_down = MATTEPAINTER_FN_convertToStroke(name="stroke_down", is_start=True, location=mouse_down_position, brush_size=brush_size, time=1.0)
-				#self.strokes.append(stroke_down)
 							
 			# Mouse Up
 			if self.click_counter > 0: 
 				mouse_up_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
 				self.mouse_positions.append(mouse_up_position)
-				#stroke_up = MATTEPAINTER_FN_convertToStroke(name="stroke_up", is_start=False, location=mouse_up_position, brush_size=brush_size, time=2.0)
-				#self.strokes.append(stroke_up)
-
-				#bpy.ops.paint.brush_select(vertex_tool="DRAW", toggle=False)
-				#bpy.ops.paint.image_paint(stroke=self.strokes)
 
 				#bpy.ops.paint.brush_colors_flip() # use for CTRL
 
@@ -717,22 +728,74 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 				else:
 					marquee_height = self.mouse_positions[0][1] - self.mouse_positions[1][1]
 
-				print(f"Width: {marquee_width}")
-				print(f"Height: {marquee_height}")
+				#print(f"Width: {marquee_width}")
+				#print(f"Height: {marquee_height}")
 
-				
+				'''
+
+				points = []
+
+				bpy.ops.paint.brush_select(vertex_tool="DRAW", toggle=False)
 
 				for i in range(int(marquee_height)):
 					for j in range(int(marquee_width)):
-						stroke = MATTEPAINTER_FN_convertToStroke(name=f"stroke{i}", is_start=True if i==0 else False, location=(self.mouse_positions[0][0]+j, self.mouse_positions[0][1]-i), brush_size=1, time=i)
+						x = self.mouse_positions[0][0] + j
+						y = self.mouse_positions[0][1] - i 
+						stroke = MATTEPAINTER_FN_convertToStroke(name="", is_start=True, mouse=(x, y), brush_size=1.0, time=0)
 						self.strokes.append(stroke)
-					print("Painted horizontal line")
 
 				bpy.ops.paint.brush_select(vertex_tool="DRAW", toggle=False)
-				bpy.ops.paint.image_paint(stroke=self.strokes)
+				bpy.ops.paint.image_paint(MATTEPAINTER_FN_3DViewOverride(), stroke=self.strokes)
+
+				'''
+
+				# ______________________
+				# new method
+				# https://blender.stackexchange.com/questions/15890/is-it-possible-to-edit-images-programmatically-with-the-blender-api
+
+				active_object = bpy.context.active_object
+				material = active_object.data.materials[0]
+				nodes = material.node_tree.nodes
+				mask = nodes.get("transparency_mask")
+				image = mask.image 
+				width = image.size[0]
+				height = image.size[1]
+
+				colour = (0.0, 0.0, 0.0, 1.0)
+
+				pixels = [0.0] * (4 * width * height)
+
+				# start pixel = object-cursor offset * 4
+				# end pixel = object-cursor-end offset * 4
+				# total pixels = end pixel - start pixel
+				# for i in range[total pixels]:
+				# 	pixels[start_pixel+i] = foreground colour[0] (or [1] or [2] or [3] or whatever)
+				# then push pixels array
+				# still want to call some sort of UI update...
+				# maybe can do it manually by jumping in and out of camera view? confirmed!
+
+				for i in range(1000000):
+					pixels[4147200+i] = 1.0
+
+				print('adjusted pixels')
+
+				print(len(pixels))
+
+				image.pixels = pixels
+
+				
+
+				print(f"NumPixels: {len(image.pixels)}")
+				print(f"Resolution: {width * height}")
+
+				print(image.name)
+
+				# ______________________
 
 				self.strokes.clear()
 				self.mouse_positions.clear()
+
+
 
 				return{'FINISHED'}
 
@@ -773,6 +836,7 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 	def invoke(self, context, event):
 		context.window_manager.modal_handler_add(self)
 		return {'RUNNING_MODAL'}
+
 
 class MATTEPAINTER_OT_selectionLasso(bpy.types.Operator):
 	# Blender Lasso Implementation
@@ -1062,7 +1126,7 @@ def register():
 	bpy.utils.register_class(MATTEPAINTER_OT_moveToCamera)
 
 	bpy.utils.register_class(MATTEPAINTER_OT_selectionMarquee)
-	bpy.utils.register_class(MATTEPAINTER_OT_selectionLasso)
+	bpy.utils.register_class(MATTEPAINTER_OT_selectionLasso)	
 
 	# Variables
 	bpy.types.Object.MATTEPAINTER_VAR_layerIndex = bpy.props.IntProperty(name='MATTEPAINTER_VAR_layerIndex',description='',subtype='NONE',options=set(), default=0)
