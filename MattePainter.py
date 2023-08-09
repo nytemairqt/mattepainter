@@ -31,6 +31,11 @@ from bpy_extras import view3d_utils
 from bpy_extras.io_utils import ImportHelper
 from PIL import Image
 
+# Draw Functions
+import blf
+import gpu
+from gpu_extras.batch import batch_for_shader
+
 #--------------------------------------------------------------
 # Miscellaneous Functions
 #--------------------------------------------------------------
@@ -209,7 +214,18 @@ def MATTEPAINTER_FN_3DViewOverride():
             if area.type == 'VIEW_3D':
                 for region in area.regions:
                     if region.type == 'WINDOW':
-                        return {'window': window, 'screen': screen, 'area': area, 'region': region, 'scene': bpy.context.scene} 	
+                        return {'window': window, 'screen': screen, 'area': area, 'region': region, 'scene': bpy.context.scene} 
+
+def MATTEPAINTER_FN_drawPixelsCallback(self, context):
+	# This draws pixels onto the screen directly, used for Lasso and Marquee selection
+	shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+	gpu.state.blend_set('ALPHA')
+	gpu.state.line_width_set(2.0)
+	batch = batch_for_shader(shader, 'LINE_STRIP', {"pos": self.mouse_path})
+	shader.uniform_float("color", (0.0, 0.0, 0.0, 0.7))
+	batch.draw(shader)	
+	gpu.state.line_width_set(1.0)
+	gpu.state.blend_set('NONE')
 
 #--------------------------------------------------------------
 # Layer Creation
@@ -647,7 +663,7 @@ class MATTEPAINTER_OT_bakeProjection(bpy.types.Operator):
 
 class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 	# Not Implemented
-	bl_idname = "mattepainter.select_lasso"
+	bl_idname = "mattepainter.select_marquee"
 	bl_label = "Selects pixels using a Marquee-style selection"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Selects pixels using a Marquee-style selection"
@@ -671,8 +687,6 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 			brush_size = bpy.context.tool_settings.unified_paint_settings.size
 
 			#MATTEPAINTER_FN_rayCast(event.mouse_x, context.area.regions.data.x, event.mouse_y, context.area.regions.data.y)
-
-
 			
 			# Mouse Down
 			if self.click_counter == 0: 
@@ -717,6 +731,9 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 				bpy.ops.paint.brush_select(vertex_tool="DRAW", toggle=False)
 				bpy.ops.paint.image_paint(stroke=self.strokes)
 
+				self.strokes.clear()
+				self.mouse_positions.clear()
+
 				return{'FINISHED'}
 
 			self.click_counter += 1				
@@ -756,6 +773,129 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 	def invoke(self, context, event):
 		context.window_manager.modal_handler_add(self)
 		return {'RUNNING_MODAL'}
+
+class MATTEPAINTER_OT_selectionLasso(bpy.types.Operator):
+	# Blender Lasso Implementation
+	#https://github.com/search?q=repo%3Ablender%2Fblender%20lasso&type=code
+
+	# Krita Lasso Implementation
+	#https://github.com/search?q=repo%3AKDE%2Fkrita%20lasso&type=code 
+
+	# Not Implemented
+	bl_idname = "mattepainter.select_lasso"
+	bl_label = "Selects pixels using a Lasso-style selection"
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Selects pixels using a Lasso-style selection"
+
+	click_counter = 0 # 0 for first mouse_down event, 1 for mouse_up
+	strokes = []
+	lasso_points = []
+	pixels = []
+	mouse_down = False
+
+	# while mouse is down, append each mouse position 
+	# at mouseup, store final mouse position
+	# increment towards mouse position[0] by 1px ie:
+	 	# calculate which offset (distance between the start and end) is larger
+	 	# for i range Math.abs((that offset ^^))
+			# increment.x = final.x +1 if final.x < initial.x else final.x-1
+			# increment.y = final.y +1 if final.y < initial.y else final.y-1
+			# positions.append((increment.x, increment.y))
+		# something like that
+
+	# once lasso is closed, calculate a bounding box around the selection using min/max
+
+	# for each pixel in the bounding box, check if that pixel is inside the lasso 
+		# for y in range len(height_of_box)
+			# for x in range (width of box)
+				# if pixel[x] is in bounding box					
+					# might need to raycast horizontally and make sure it passes the lasso ODD times 
+					# append pixel
+		# paint pixels
+
+
+	@classmethod
+	def poll(cls, context):
+		return context.mode in ['PAINT_TEXTURE']
+
+	def modal(self, context:bpy.types.Context, event:bpy.types.Event):
+		context.area.tag_redraw()
+		if event.type == 'LEFTMOUSE':
+			if not self.mouse_down:
+				self.mouse_down = True
+			else:
+				self.mouse_down = False
+
+				# Determine the bounding rectangle of the lassoed area
+				min_x = int(min(self.lasso_points, key=lambda p: p[0])[0])
+				max_x = int(max(self.lasso_points, key=lambda p: p[0])[0])
+				min_y = int(min(self.lasso_points, key=lambda p: p[1])[1])
+				max_y = int(max(self.lasso_points, key=lambda p: p[1])[1])
+
+				for x in range(min_x, max_x + 1):
+					for y in range(min_y, max_y + 1):
+						self.pixels.append((x, y))
+
+				print(f'Num Points: {len(self.lasso_points)}')
+				print(f'Num Pixels in Lasso: {len(self.pixels)}')
+				print(f'Min X: {min_x}, Max X: {max_x}')
+				print(f'Min Y: {min_y}, Max Y: {max_y}')
+
+				# For each Y row
+					# raycast pixel 
+					# check if it crosses an ODD number of times
+					# if true, append it to strokes
+				# paint strokes
+
+				'''
+
+				def intersect_lasso(pt, verts, nr, ):
+					isect = False
+
+					for (i=0; j = nr-1; i < nr; j = i++)
+					{
+						if (((verts[i][1] > pt[1]) != (verts[j][1] > pt[1])) 
+							&& 
+							(pt[0] < (verts[j][0] - verts[i][0] * (pt[1] - verts[i][1]) / (verts[i][1]) / (verts[j][1] - verts[i][1])
+								+ verts[i][0])))
+						{
+							isect = !isect;
+						}
+					}
+					return isect;
+				'''
+
+
+				# Clear array
+				self.lasso_points.clear()
+				self.pixels.clear()		
+
+				# Remove screen draw
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')	
+
+				return{'FINISHED'}
+
+		elif event.type == 'MOUSEMOVE' and self.mouse_down:
+			mouse_pos = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
+			self.lasso_points.append(mouse_pos)
+			
+			# Append mouse positions for screen-draw
+			self.mouse_path.append((event.mouse_region_x, event.mouse_region_y))             
+
+		elif event.type in {'RIGHTMOUSE', 'ESC'}:
+			# Remove screen draw
+			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+			return {'FINISHED'}
+
+		return {'RUNNING_MODAL'}
+
+	def invoke(self, context, event):
+		self.mouse_path = []
+		args = (self, context)
+		self._handle = bpy.types.SpaceView3D.draw_handler_add(MATTEPAINTER_FN_drawPixelsCallback, args, 'WINDOW', 'POST_PIXEL')
+
+		context.window_manager.modal_handler_add(self)
+		return {'RUNNING_MODAL'}		
 
 
 #--------------------------------------------------------------
@@ -803,6 +943,7 @@ class MATTEPAINTER_PT_panelLayers(bpy.types.Panel):
 		# Not Implemented
 		row = layout.row()
 		row.operator(MATTEPAINTER_OT_selectionMarquee.bl_idname, text="Marquee Select", icon="CONSOLE")
+		row.operator(MATTEPAINTER_OT_selectionLasso.bl_idname, text="Lasso Select", icon="CONSOLE")
 
 		if bpy.data.collections.find(r"MattePainter") != -1 and len(bpy.data.collections[r"MattePainter"].objects) > 0:
 			box = layout.box()
@@ -921,6 +1062,7 @@ def register():
 	bpy.utils.register_class(MATTEPAINTER_OT_moveToCamera)
 
 	bpy.utils.register_class(MATTEPAINTER_OT_selectionMarquee)
+	bpy.utils.register_class(MATTEPAINTER_OT_selectionLasso)
 
 	# Variables
 	bpy.types.Object.MATTEPAINTER_VAR_layerIndex = bpy.props.IntProperty(name='MATTEPAINTER_VAR_layerIndex',description='',subtype='NONE',options=set(), default=0)
@@ -958,6 +1100,7 @@ def unregister():
 	bpy.utils.unregister_class(MATTEPAINTER_OT_moveToCamera)
 
 	bpy.utils.unregister_class(MATTEPAINTER_OT_selectionMarquee)
+	bpy.utils.unregister_class(MATTEPAINTER_OT_selectionLasso)
 
 	# Variables
 
