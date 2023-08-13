@@ -32,6 +32,7 @@ from bpy_extras.io_utils import ImportHelper
 from PIL import Image
 import time, sys
 
+
 # Draw Functions
 import blf
 import gpu
@@ -184,7 +185,8 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 		node_mask.location = Vector((-1100.0, 200.0))
 
 
-def MATTEPAINTER_FN_rayCast(mouse_x, context_x, mouse_y, context_y):
+def MATTEPAINTER_FN_rayCast(raycast_data):
+	mouse_x, context_x, mouse_y, context_y = raycast_data
 	mouse_position = Vector(((mouse_x) - context_x, mouse_y - context_y))
 	region = bpy.context.region 
 	region_data = bpy.context.region_data
@@ -222,7 +224,26 @@ def MATTEPAINTER_FN_3DViewOverride():
                     if region.type == 'WINDOW':
                         return {'window': window, 'screen': screen, 'area': area, 'region': region, 'scene': bpy.context.scene} 
 
-def MATTEPAINTER_FN_drawPixelsCallback(self, context):
+def MATTEPAINTER_FN_drawMarqueeCallback(self, context):
+	# This draws pixels onto the screen directly, used for Lasso and Marquee selection
+	start_vert = self.mouse_positions[0] # [0][0] 
+	end_vert = self.mouse_positions[1] # [1][1]
+
+	corner_vert_a = (self.mouse_positions[0][0], self.mouse_positions[1][1])
+	corner_vert_b = (self.mouse_positions[1][0], self.mouse_positions[0][1])
+	verts = (start_vert, corner_vert_a, corner_vert_b, end_vert)
+	indices = ((0, 1, 2), (1, 2, 3))
+
+	shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+	gpu.state.blend_set('ALPHA')
+	gpu.state.line_width_set(2.0)
+	batch = batch_for_shader(shader, 'TRIS', {"pos": verts}, indices=indices)
+	shader.uniform_float("color", (0.0, 0.0, 0.0, 0.4))
+	batch.draw(shader)	
+	gpu.state.line_width_set(1.0)
+	gpu.state.blend_set('NONE')                 
+
+def MATTEPAINTER_FN_drawLassoCallback(self, context):
 	# This draws pixels onto the screen directly, used for Lasso and Marquee selection
 	shader = gpu.shader.from_builtin('UNIFORM_COLOR')
 	gpu.state.blend_set('ALPHA')
@@ -424,6 +445,7 @@ class MATTEPAINTER_OT_paintMask(bpy.types.Operator):
 		if not context.active_object.type == "MESH": 
 			self.report({"WARNING"}, "Target Object is not Paintable.")	
 			return {'CANCELLED'}
+		bpy.ops.object.transform_apply(scale=True)
 		bpy.ops.object.mode_set(mode='TEXTURE_PAINT')
 		bpy.context.scene.tool_settings.image_paint.use_backface_culling = False
 		return {'FINISHED'}
@@ -667,23 +689,16 @@ class MATTEPAINTER_OT_bakeProjection(bpy.types.Operator):
 # ____NOT_IMPLEMENTED
 #--------------------------------------------------------------
 
+
+
 class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
-
-	# convert 2d to 3d (as in where on the mesh the marquee is)
-	# select material
-	# select node tree
-	# select alpha image
-	# fill pixels relative to the conversion
-
-	# Not Implemented
 	bl_idname = "mattepainter.select_marquee"
 	bl_label = "Selects pixels using a Marquee-style selection"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Selects pixels using a Marquee-style selection"
 
-	click_counter = 0 # 0 for first mouse_down event, 1 for mouse_up
-	strokes = []
-	mouse_positions = []
+	#mouse_positions = []
+	mouse_down = False
 
 	def set_pixel(x, y, width, colour):
 		offset = (x + int(y*width)) * 4
@@ -695,145 +710,146 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 		return context.mode in ['PAINT_TEXTURE']
 
 	def modal(self, context:bpy.types.Context, event:bpy.types.Event):
-		if event.type == 'LEFTMOUSE':
+		context.area.tag_redraw()
+		active_object = bpy.context.active_object
 
-			#print(f'Click Counter: {self.click_counter}')
+		if event.type == 'MOUSEMOVE' and self.mouse_down:
+
+			mouse_current_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y)) 
+			self.mouse_positions[1] = mouse_current_position
+
+			marquee_width = self.mouse_positions[1][0] - self.mouse_positions[0][0]
+			marquee_height = self.mouse_positions[0][1] - self.mouse_positions[1][1]		
+
+		elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+
+			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')				
+			return{'FINISHED'}
+
+		elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+
+			self.mouse_down = True
 
 			area = MATTEPAINTER_FN_contextOverride("VIEW_3D")
 			bpy.context.temp_override(area=area)	
 
 			brush_size = bpy.context.tool_settings.unified_paint_settings.size
 
-			#MATTEPAINTER_FN_rayCast(event.mouse_x, context.area.regions.data.x, event.mouse_y, context.area.regions.data.y)
+			raycast_data = [event.mouse_x, context.area.regions.data.x, event.mouse_y, context.area.regions.data.y]
 			
-			# Mouse Down
-			if self.click_counter == 0: 
-				mouse_down_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
-				self.mouse_positions.append(mouse_down_position)
-							
-			# Mouse Up
-			if self.click_counter > 0: 
-				mouse_up_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
-				self.mouse_positions.append(mouse_up_position)
+			# Mouse Down			
+			mouse_down_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
+			self.mouse_positions.append(mouse_down_position)
+			self.mouse_positions.append(mouse_down_position) # Not a mistake, need to append twice
 
-				#bpy.ops.paint.brush_colors_flip() # use for CTRL
+			start_position = self.mouse_positions[0]
 
-				if self.mouse_positions[1][0] > self.mouse_positions[0][0]:
-					marquee_width = self.mouse_positions[1][0] - self.mouse_positions[0][0]
+			result_down, location_down, normal_down, index_down, obj_down, matrix_down = MATTEPAINTER_FN_rayCast(raycast_data)
+
+			region = bpy.context.region 
+			region3d = bpy.context.space_data.region_3d 
+
+			object_origin = active_object.location # assuming origin hasn't moved
+			object_size = active_object.dimensions
+
+			for area in bpy.context.screen.areas:
+			    if area.type=='VIEW_3D':
+			        X= area.x
+			        Y= area.y
+			        WIDTH=area.width
+			        HEIGHT=area.height
+
+			# get vertex information (scale must be applied)
+
+			vertices = active_object.data.vertices
+
+			top_left = vertices[2].co
+			top_left_2d = view3d_utils.location_3d_to_region_2d(region, region3d, top_left)
+
+			bottom_right = vertices[1].co
+			bottom_right_2d = view3d_utils.location_3d_to_region_2d(region, region3d, bottom_right)
+
+			print(f'Top_Left: {top_left_2d}')
+			print(f'Bottom_right: {bottom_right_2d}')
+			print(f'Click Position: {start_position}')
+
+			if start_position[0] > top_left_2d[0] and start_position[0] < bottom_right_2d[0]:
+				if start_position[1] > bottom_right_2d[1] and start_position[1] < top_left_2d[1]:
+					print('clicked inside the mesh')
 				else:
-					marquee_width = self.mouse_positions[0][0] - self.mouse_positions[1][0]
-
-				if self.mouse_positions[1][1] > self.mouse_positions[0][1]:
-					marquee_height = self.mouse_positions[1][1] - self.mouse_positions[0][1]
-				else:
-					marquee_height = self.mouse_positions[0][1] - self.mouse_positions[1][1]
-
-				#print(f"Width: {marquee_width}")
-				#print(f"Height: {marquee_height}")
-
-				'''
-
-				points = []
-
-				bpy.ops.paint.brush_select(vertex_tool="DRAW", toggle=False)
-
-				for i in range(int(marquee_height)):
-					for j in range(int(marquee_width)):
-						x = self.mouse_positions[0][0] + j
-						y = self.mouse_positions[0][1] - i 
-						stroke = MATTEPAINTER_FN_convertToStroke(name="", is_start=True, mouse=(x, y), brush_size=1.0, time=0)
-						self.strokes.append(stroke)
-
-				bpy.ops.paint.brush_select(vertex_tool="DRAW", toggle=False)
-				bpy.ops.paint.image_paint(MATTEPAINTER_FN_3DViewOverride(), stroke=self.strokes)
-
-				'''
-
-				# ______________________
-				# new method
-				# https://blender.stackexchange.com/questions/15890/is-it-possible-to-edit-images-programmatically-with-the-blender-api
-
-				active_object = bpy.context.active_object
-				material = active_object.data.materials[0]
-				nodes = material.node_tree.nodes
-				mask = nodes.get("transparency_mask")
-				image = mask.image 
-				width = image.size[0]
-				height = image.size[1]
-
-				colour = (0.0, 0.0, 0.0, 1.0)
-
-				pixels = [0.0] * (4 * width * height)
-
-				# start pixel = object-cursor offset * 4
-				# end pixel = object-cursor-end offset * 4
-				# total pixels = end pixel - start pixel
-				# for i in range[total pixels]:
-				# 	pixels[start_pixel+i] = foreground colour[0] (or [1] or [2] or [3] or whatever)
-				# then push pixels array
-				# still want to call some sort of UI update...
-				# maybe can do it manually by jumping in and out of camera view? confirmed!
-
-				for i in range(1000000):
-					pixels[4147200+i] = 1.0
-
-				print('adjusted pixels')
-
-				print(len(pixels))
-
-				image.pixels = pixels
-
-				
-
-				print(f"NumPixels: {len(image.pixels)}")
-				print(f"Resolution: {width * height}")
-
-				print(image.name)
-
-				# ______________________
-
-				self.strokes.clear()
-				self.mouse_positions.clear()
+					print('missed both')
+			else:	
+				print('missed X')
 
 
+        
 
-				return{'FINISHED'}
-
-			self.click_counter += 1				
-
-			
-
-			#print('________________________________')
-			#print(f'Ray Origin: {ray_origin}')
-			#print(f'Ray Vector: {ray_vector}')
-			#print(f'Direction: {direction}')
-			#print(f'Result: {result}')
-			#print(f'Location: {location}')
-
-			# CONFIRMED: calling twice on mouse down and up
-
-
-
-			'''
-			
-			Ray Origin: <Vector (1.0497, -499.9999, -0.7102)>
-			Ray Vector: <Vector (-0.0000, 1.0000, 0.0000)>
-			Direction: <Vector (0.0000, 1000.0000, 0.0001)>
-			Result: False
-			Location: <Vector (0.0000, 0.0000, 0.0000)>
-			Matrix: <Matrix 4x4 (1.0000, 0.0000, 0.0000, 0.0000)
-			            (0.0000, 1.0000, 0.0000, 0.0000)
-			            (0.0000, 0.0000, 1.0000, 0.0000)
-			            (0.0000, 0.0000, 0.0000, 1.0000)>
-
-			'''
+			#if start_position[0] < top_left_vert_2d[0]:
+			#	print('clicked left of object')
+			#elif start_position[0] > top_left_vert_2d[0] + object_size_2d[0]:
+			#	print('clicked to the right of object')
+			#elif click_offset > 100:
+			#	print('wow u suck')
+			#elif click_offset < 100:
+			#	print('very accurate')
+		
 
 		elif event.type in {'RIGHTMOUSE', 'ESC'}:
+			# Remove screen draw
+			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')	
+			self.mouse_down = False
 			return {'FINISHED'}
 
 		return {'RUNNING_MODAL'}
 
-	def invoke(self, context, event):
+		# ______________________
+		# new method
+		# https://blender.stackexchange.com/questions/15890/is-it-possible-to-edit-images-programmatically-with-the-blender-api
+
+		#active_object = bpy.context.active_object
+		#material = active_object.data.materials[0]
+		#nodes = material.node_tree.nodes
+		#mask = nodes.get("transparency_mask")
+		#image = mask.image 
+		#width = image.size[0]
+		#height = image.size[1]
+		#colour = (0.0, 0.0, 0.0, 1.0)
+		#pixels = [0.0] * (4 * width * height)
+
+		# still need to raycast to get cursor-object offset
+		# start pixel = object-cursor offset * 4
+		# end pixel = object-cursor-end offset * 4
+		# total pixels = end pixel - start pixel
+		# for i in range[total pixels]:
+		# 	pixels[start_pixel+i] = foreground colour[0] (or [1] or [2] or [3] or whatever)
+		# then push pixels array
+		# still want to call some sort of UI update...
+		# maybe can do it manually by jumping in and out of camera view? confirmed!
+
+		#for i in range(1000000):
+		#	pixels[4147200+i] = 1.0
+
+				
+		#image.pixels = pixels
+	
+
+		# ______________________
+		#self.mouse_positions.clear()
+
+
+		#bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+		#self.mouse_down = False
+		#return{'FINISHED'}
+
+		#self.click_counter += 1				
+
+		
+
+	def invoke(self, context, event):	
+		self.mouse_positions = []		
+		args = (self, context)
+		self._handle = bpy.types.SpaceView3D.draw_handler_add(MATTEPAINTER_FN_drawMarqueeCallback, args, 'WINDOW', 'POST_PIXEL')
+
 		context.window_manager.modal_handler_add(self)
 		return {'RUNNING_MODAL'}
 
@@ -851,7 +867,6 @@ class MATTEPAINTER_OT_selectionLasso(bpy.types.Operator):
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Selects pixels using a Lasso-style selection"
 
-	click_counter = 0 # 0 for first mouse_down event, 1 for mouse_up
 	strokes = []
 	lasso_points = []
 	pixels = []
@@ -956,7 +971,7 @@ class MATTEPAINTER_OT_selectionLasso(bpy.types.Operator):
 	def invoke(self, context, event):
 		self.mouse_path = []
 		args = (self, context)
-		self._handle = bpy.types.SpaceView3D.draw_handler_add(MATTEPAINTER_FN_drawPixelsCallback, args, 'WINDOW', 'POST_PIXEL')
+		self._handle = bpy.types.SpaceView3D.draw_handler_add(MATTEPAINTER_FN_drawLassoCallback, args, 'WINDOW', 'POST_PIXEL')
 
 		context.window_manager.modal_handler_add(self)
 		return {'RUNNING_MODAL'}		
