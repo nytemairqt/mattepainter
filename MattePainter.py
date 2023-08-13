@@ -224,24 +224,7 @@ def MATTEPAINTER_FN_3DViewOverride():
                     if region.type == 'WINDOW':
                         return {'window': window, 'screen': screen, 'area': area, 'region': region, 'scene': bpy.context.scene} 
 
-def MATTEPAINTER_FN_drawMarqueeCallback(self, context):
-	# This draws pixels onto the screen directly, used for Lasso and Marquee selection
-	start_vert = self.mouse_positions[0] # [0][0] 
-	end_vert = self.mouse_positions[1] # [1][1]
-
-	corner_vert_a = (self.mouse_positions[0][0], self.mouse_positions[1][1])
-	corner_vert_b = (self.mouse_positions[1][0], self.mouse_positions[0][1])
-	verts = (start_vert, corner_vert_a, corner_vert_b, end_vert)
-	indices = ((0, 1, 2), (1, 2, 3))
-
-	shader = gpu.shader.from_builtin('UNIFORM_COLOR')
-	gpu.state.blend_set('ALPHA')
-	gpu.state.line_width_set(2.0)
-	batch = batch_for_shader(shader, 'TRIS', {"pos": verts}, indices=indices)
-	shader.uniform_float("color", (0.0, 0.0, 0.0, 0.4))
-	batch.draw(shader)	
-	gpu.state.line_width_set(1.0)
-	gpu.state.blend_set('NONE')                 
+              
 
 def MATTEPAINTER_FN_drawLassoCallback(self, context):
 	# This draws pixels onto the screen directly, used for Lasso and Marquee selection
@@ -301,6 +284,7 @@ class MATTEPAINTER_OT_newLayerFromFile(bpy.types.Operator, ImportHelper):
 
 		active_object.rotation_euler = camera.rotation_euler
 		MATTEPAINTER_FN_setDimensions(target=active_object, image=image, camera=camera, scene=scene)
+		bpy.ops.object.transform_apply(scale=True)
 
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
@@ -352,6 +336,7 @@ class MATTEPAINTER_OT_newEmptyPaintLayer(bpy.types.Operator):
 
 		active_object.rotation_euler = camera.rotation_euler
 		MATTEPAINTER_FN_setDimensions(target=active_object, image=image, camera=camera, scene=scene)
+		bpy.ops.object.transform_apply(scale=True)
 
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
@@ -413,6 +398,7 @@ class MATTEPAINTER_OT_newLayerFromClipboard(bpy.types.Operator):
 
 		active_object.rotation_euler = camera.rotation_euler
 		MATTEPAINTER_FN_setDimensions(target=active_object, image=image, camera=camera, scene=scene)
+		bpy.ops.object.transform_apply(scale=True)
 
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
@@ -689,6 +675,22 @@ class MATTEPAINTER_OT_bakeProjection(bpy.types.Operator):
 # ____NOT_IMPLEMENTED
 #--------------------------------------------------------------
 
+def MATTEPAINTER_FN_drawMarqueeCallback(self, context):
+	if self.mouse_down:
+		start_vert, end_vert = self.mouse_positions
+
+		corner_vert_a = (self.mouse_positions[0][0], self.mouse_positions[1][1])
+		corner_vert_b = (self.mouse_positions[1][0], self.mouse_positions[0][1])
+		verts = (start_vert, corner_vert_a, corner_vert_b, end_vert)
+		indices = ((0, 1, 2), (1, 2, 3))
+		shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+		gpu.state.blend_set('ALPHA')
+		gpu.state.line_width_set(2.0)
+		batch = batch_for_shader(shader, 'TRIS', {"pos": verts}, indices=indices)
+		shader.uniform_float("color", (0.0, 0.0, 0.0, 0.4))
+		batch.draw(shader)	
+		gpu.state.line_width_set(1.0)
+		gpu.state.blend_set('NONE')   
 
 
 class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
@@ -697,13 +699,21 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Selects pixels using a Marquee-style selection"
 
-	#mouse_positions = []
 	mouse_down = False
 
-	def set_pixel(x, y, width, colour):
+	def _set_pixel(x, y, width, colour):
 		offset = (x + int(y*width)) * 4
 		for i in range(4):
 			image.pixels[offset+i] = colour
+
+	def _in_bounds(self, mouse_position, top_left_corner, bottom_right_corner):
+		mouse_x, mouse_y = mouse_position
+		min_x, max_y = top_left_corner
+		max_x, min_y = bottom_right_corner
+		if mouse_x > min_x and mouse_x < max_x and mouse_y > min_y and mouse_y < max_y:
+			return True 
+		else:
+			return False
 
 	@classmethod
 	def poll(cls, context):
@@ -714,6 +724,8 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 		active_object = bpy.context.active_object
 
 		if event.type == 'MOUSEMOVE' and self.mouse_down:
+
+			test_var = 1
 
 			mouse_current_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y)) 
 			self.mouse_positions[1] = mouse_current_position
@@ -733,23 +745,25 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 			area = MATTEPAINTER_FN_contextOverride("VIEW_3D")
 			bpy.context.temp_override(area=area)	
 
-			brush_size = bpy.context.tool_settings.unified_paint_settings.size
+			
 
 			raycast_data = [event.mouse_x, context.area.regions.data.x, event.mouse_y, context.area.regions.data.y]
 			
 			# Mouse Down			
+
+
 			mouse_down_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
 			self.mouse_positions.append(mouse_down_position)
 			self.mouse_positions.append(mouse_down_position) # Not a mistake, need to append twice
 
 			start_position = self.mouse_positions[0]
 
+			'''
+
 			result_down, location_down, normal_down, index_down, obj_down, matrix_down = MATTEPAINTER_FN_rayCast(raycast_data)
 
 			region = bpy.context.region 
 			region3d = bpy.context.space_data.region_3d 
-
-			object_origin = active_object.location # assuming origin hasn't moved
 			object_size = active_object.dimensions
 
 			for area in bpy.context.screen.areas:
@@ -759,8 +773,6 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 			        WIDTH=area.width
 			        HEIGHT=area.height
 
-			# get vertex information (scale must be applied)
-
 			vertices = active_object.data.vertices
 
 			top_left = vertices[2].co
@@ -769,35 +781,29 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 			bottom_right = vertices[1].co
 			bottom_right_2d = view3d_utils.location_3d_to_region_2d(region, region3d, bottom_right)
 
-			print(f'Top_Left: {top_left_2d}')
-			print(f'Bottom_right: {bottom_right_2d}')
-			print(f'Click Position: {start_position}')
+			# get 2d area of object 
 
-			if start_position[0] > top_left_2d[0] and start_position[0] < bottom_right_2d[0]:
-				if start_position[1] > bottom_right_2d[1] and start_position[1] < top_left_2d[1]:
-					print('clicked inside the mesh')
-				else:
-					print('missed both')
-			else:	
-				print('missed X')
+			width_2d = bottom_right_2d[0] - top_left_2d[0]
+			height_2d = top_left_2d[1] - bottom_right_2d[1]
 
+			scale_2d = (width_2d, height_2d)
 
-        
+			in_bounds = self._in_bounds(start_position, top_left_2d, bottom_right_2d)
 
-			#if start_position[0] < top_left_vert_2d[0]:
-			#	print('clicked left of object')
-			#elif start_position[0] > top_left_vert_2d[0] + object_size_2d[0]:
-			#	print('clicked to the right of object')
-			#elif click_offset > 100:
-			#	print('wow u suck')
-			#elif click_offset < 100:
-			#	print('very accurate')
-		
+			if in_bounds:
+				# get pixel at click 
+				# offset = 
+				print(f'Area of Clicked Object: {scale_2d}')
+			else:
+				print('missed the mesh')	
+
+			'''	
 
 		elif event.type in {'RIGHTMOUSE', 'ESC'}:
 			# Remove screen draw
 			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')	
 			self.mouse_down = False
+			
 			return {'FINISHED'}
 
 		return {'RUNNING_MODAL'}
@@ -847,6 +853,7 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 
 	def invoke(self, context, event):	
 		self.mouse_positions = []		
+		self._mouseover_positions = []
 		args = (self, context)
 		self._handle = bpy.types.SpaceView3D.draw_handler_add(MATTEPAINTER_FN_drawMarqueeCallback, args, 'WINDOW', 'POST_PIXEL')
 
