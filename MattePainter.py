@@ -740,64 +740,82 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 
 		elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
 
-			self.mouse_down = True
+			#____unused
+			#raycast_data = [event.mouse_x, context.area.regions.data.x, event.mouse_y, context.area.regions.data.y]
 
+
+			# Setup basic logic
+			self.mouse_down = True
 			area = MATTEPAINTER_FN_contextOverride("VIEW_3D")
 			bpy.context.temp_override(area=area)	
-
-			
-
-			raycast_data = [event.mouse_x, context.area.regions.data.x, event.mouse_y, context.area.regions.data.y]
-			
-			# Mouse Down			
-
-
-			mouse_down_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
-			self.mouse_positions.append(mouse_down_position)
-			self.mouse_positions.append(mouse_down_position) # Not a mistake, need to append twice
-
-			start_position = self.mouse_positions[0]
-
-			'''
-
-			result_down, location_down, normal_down, index_down, obj_down, matrix_down = MATTEPAINTER_FN_rayCast(raycast_data)
-
 			region = bpy.context.region 
 			region3d = bpy.context.space_data.region_3d 
-			object_size = active_object.dimensions
+			object_size = active_object.dimensions	
 
+			# dont think I need this anymore
 			for area in bpy.context.screen.areas:
 			    if area.type=='VIEW_3D':
 			        X= area.x
 			        Y= area.y
 			        WIDTH=area.width
-			        HEIGHT=area.height
-
+			        HEIGHT=area.height		
+			
+			# Grab Mouse Down vector			
+			mouse_down_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
+			self.mouse_positions.append(mouse_down_position)
+			self.mouse_positions.append(mouse_down_position) # Not a mistake, need to append twice
+			start_position = self.mouse_positions[0]			
+			
+			# Grab Vertices			
 			vertices = active_object.data.vertices
-
 			top_left = vertices[2].co
 			top_left_2d = view3d_utils.location_3d_to_region_2d(region, region3d, top_left)
-
 			bottom_right = vertices[1].co
 			bottom_right_2d = view3d_utils.location_3d_to_region_2d(region, region3d, bottom_right)
 
-			# get 2d area of object 
-
+			# Use Vertices to Calculate Screen-Based Area of Object
 			width_2d = bottom_right_2d[0] - top_left_2d[0]
 			height_2d = top_left_2d[1] - bottom_right_2d[1]
-
 			scale_2d = (width_2d, height_2d)
 
+			# Check if click was inside object
 			in_bounds = self._in_bounds(start_position, top_left_2d, bottom_right_2d)
 
 			if in_bounds:
-				# get pixel at click 
-				# offset = 
+				# calculate where in object click happened
 				print(f'Area of Clicked Object: {scale_2d}')
+
+				# mouse x - left edge distance from 0 
+
+				offset_x = start_position[0] - top_left_2d[0]
+				offset_x_percentage = (offset_x / scale_2d[0])
+
+				print(f'Offset in pixels: {offset_x}')
+				print(f'Offset in % : {offset_x_percentage * 100}%')
+
+				active_object = bpy.context.active_object
+				material = active_object.data.materials[0]
+				nodes = material.node_tree.nodes
+				mask = nodes.get("transparency_mask")
+				image = mask.image 
+				width = image.size[0]
+				height = image.size[1]
+				colour = (0.0, 0.0, 0.0, 1.0)
+				pixels = [1.0] * (4 * width * height)
+
+				num_pixels = len(pixels)
+				num_pixels_to_change = int(num_pixels * offset_x_percentage)
+
+				for i in range(num_pixels_to_change, num_pixels):
+					pixels[i] = 0.0		
+
+				image.pixels = pixels
+				# offset calculation goes from bottom up
+				# alpha clip resolves weird line at the top.
+
 			else:
 				print('missed the mesh')	
 
-			'''	
 
 		elif event.type in {'RIGHTMOUSE', 'ESC'}:
 			# Remove screen draw
