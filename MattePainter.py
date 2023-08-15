@@ -451,8 +451,15 @@ class MATTEPAINTER_OT_layerSelect(bpy.types.Operator):
 			obj.select_set(False)
 
 		if len(objects) > 0:
-			objects[self.MATTEPAINTER_VAR_layerIndex].select_set(True)
-			bpy.context.view_layer.objects.active = objects[self.MATTEPAINTER_VAR_layerIndex]
+			if context.mode in ['PAINT_TEXTURE'] and objects[self.MATTEPAINTER_VAR_layerIndex].type == 'MESH':	
+				bpy.ops.object.mode_set(mode='OBJECT')
+				objects[self.MATTEPAINTER_VAR_layerIndex].select_set(True)
+				bpy.context.view_layer.objects.active = objects[self.MATTEPAINTER_VAR_layerIndex]							
+				bpy.ops.object.mode_set(mode='TEXTURE_PAINT')
+			else:
+				objects[self.MATTEPAINTER_VAR_layerIndex].select_set(True)
+				bpy.context.view_layer.objects.active = objects[self.MATTEPAINTER_VAR_layerIndex]	
+
 		return {'FINISHED'}
 
 class MATTEPAINTER_OT_layerVisibility(bpy.types.Operator):
