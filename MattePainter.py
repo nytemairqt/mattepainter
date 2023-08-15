@@ -1089,9 +1089,11 @@ class MATTEPAINTER_PT_panelLayers(bpy.types.Panel):
 
 		# Selection Tools
 		# Not Implemented
+
+
 		row = layout.row()
-		row.operator(MATTEPAINTER_OT_toolBrush.bl_idname, text="", icon="BRUSHES_ALL")
-		row.operator(MATTEPAINTER_OT_toolLine.bl_idname, text="", icon="IPO_LINEAR")
+		row.operator(MATTEPAINTER_OT_toolBrush.bl_idname, text="", icon="BRUSHES_ALL", emboss=True if bpy.data.brushes["TexDraw"].stroke_method == 'SPACE' else False, depress=True if bpy.data.brushes["TexDraw"].stroke_method == 'SPACE' else False)
+		row.operator(MATTEPAINTER_OT_toolLine.bl_idname, text="", icon="IPO_LINEAR", emboss=True if bpy.data.brushes["TexDraw"].stroke_method == 'LINE' else False, depress=True if bpy.data.brushes["TexDraw"].stroke_method == 'LINE' else False)
 		row.operator(MATTEPAINTER_OT_selectionMarquee.bl_idname, text="", icon="SELECT_SET")
 		row.operator(MATTEPAINTER_OT_selectionLasso.bl_idname, text="", icon="MOD_DASH")
 
