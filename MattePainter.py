@@ -675,6 +675,36 @@ class MATTEPAINTER_OT_bakeProjection(bpy.types.Operator):
 # ____NOT_IMPLEMENTED
 #--------------------------------------------------------------
 
+class MATTEPAINTER_OT_toolBrush(bpy.types.Operator):
+	bl_idname = "mattepainter.tool_brush"
+	bl_label = "Switches draw type to Brush"
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Switches draw type to Brush"
+
+	@classmethod
+	def poll(cls, context):
+		return context.mode in ['PAINT_TEXTURE']
+
+	def execute(self, context):
+		bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
+		bpy.data.brushes["TexDraw"].stroke_method = 'SPACE'
+		return {'FINISHED'}		
+
+class MATTEPAINTER_OT_toolLine(bpy.types.Operator):
+	bl_idname = "mattepainter.tool_line"
+	bl_label = "Switches draw type to Line"
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Switches draw type to Line"
+
+	@classmethod
+	def poll(cls, context):
+		return context.mode in ['PAINT_TEXTURE']
+
+	def execute(self, context):
+		bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
+		bpy.data.brushes["TexDraw"].stroke_method = 'LINE'
+		return {'FINISHED'}
+
 def MATTEPAINTER_FN_drawMarqueeCallback(self, context):
 	if self.mouse_down:
 		start_vert, end_vert = self.mouse_positions
@@ -802,16 +832,23 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 				height = image.size[1]
 				colour = (0.0, 0.0, 0.0, 1.0)
 				pixels = [1.0] * (4 * width * height)
+				print(len(image.pixels))
+				#pixels = image.pixels[:]
 
 				num_pixels = len(pixels)
 				num_pixels_to_change = int(num_pixels * offset_x_percentage)
 
 				for i in range(num_pixels_to_change, num_pixels):
-					pixels[i] = 0.0		
+					pixels[i] = 0.0
 
 				image.pixels = pixels
-				# offset calculation goes from bottom up
+				# pixels are calculated from bottom row left to right
 				# alpha clip resolves weird line at the top.
+				# IMPORTANT: need to add a pixel skipping method
+				# 	basically it would just jump ahead {WIDTH} num pixels to get to the next row
+				# OR 
+				# split the pixels into rows by {WIDTH} then run processing on each individual row, then recombine
+				# use pythons split stuff it [:, :, :] using width somewherein there
 
 			else:
 				print('missed the mesh')	
@@ -1046,8 +1083,10 @@ class MATTEPAINTER_PT_panelLayers(bpy.types.Panel):
 		# Selection Tools
 		# Not Implemented
 		row = layout.row()
-		row.operator(MATTEPAINTER_OT_selectionMarquee.bl_idname, text="Marquee Select", icon="CONSOLE")
-		row.operator(MATTEPAINTER_OT_selectionLasso.bl_idname, text="Lasso Select", icon="CONSOLE")
+		row.operator(MATTEPAINTER_OT_toolBrush.bl_idname, text="", icon="BRUSHES_ALL")
+		row.operator(MATTEPAINTER_OT_toolLine.bl_idname, text="", icon="IPO_LINEAR")
+		row.operator(MATTEPAINTER_OT_selectionMarquee.bl_idname, text="", icon="SELECT_SET")
+		row.operator(MATTEPAINTER_OT_selectionLasso.bl_idname, text="", icon="MOD_DASH")
 
 		if bpy.data.collections.find(r"MattePainter") != -1 and len(bpy.data.collections[r"MattePainter"].objects) > 0:
 			box = layout.box()
@@ -1165,6 +1204,8 @@ def register():
 	bpy.utils.register_class(MATTEPAINTER_OT_layerShowMask)
 	bpy.utils.register_class(MATTEPAINTER_OT_moveToCamera)
 
+	bpy.utils.register_class(MATTEPAINTER_OT_toolBrush)
+	bpy.utils.register_class(MATTEPAINTER_OT_toolLine)
 	bpy.utils.register_class(MATTEPAINTER_OT_selectionMarquee)
 	bpy.utils.register_class(MATTEPAINTER_OT_selectionLasso)	
 
@@ -1203,6 +1244,8 @@ def unregister():
 	bpy.utils.unregister_class(MATTEPAINTER_OT_layerShowMask)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_moveToCamera)
 
+	bpy.utils.unregister_class(MATTEPAINTER_OT_toolBrush)
+	bpy.utils.unregister_class(MATTEPAINTER_OT_toolLine)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_selectionMarquee)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_selectionLasso)
 
