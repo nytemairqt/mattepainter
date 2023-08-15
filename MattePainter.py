@@ -677,7 +677,7 @@ class MATTEPAINTER_OT_bakeProjection(bpy.types.Operator):
 
 class MATTEPAINTER_OT_toolBrush(bpy.types.Operator):
 	bl_idname = "mattepainter.tool_brush"
-	bl_label = "Switches draw type to Brush"
+	bl_label = "Brush Tool"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Switches draw type to Brush"
 
@@ -692,7 +692,7 @@ class MATTEPAINTER_OT_toolBrush(bpy.types.Operator):
 
 class MATTEPAINTER_OT_toolLine(bpy.types.Operator):
 	bl_idname = "mattepainter.tool_line"
-	bl_label = "Switches draw type to Line"
+	bl_label = "Line Tool"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Switches draw type to Line"
 
@@ -725,7 +725,7 @@ def MATTEPAINTER_FN_drawMarqueeCallback(self, context):
 
 class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 	bl_idname = "mattepainter.select_marquee"
-	bl_label = "Selects pixels using a Marquee-style selection"
+	bl_label = "Marquee Fill"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Selects pixels using a Marquee-style selection"
 
@@ -925,7 +925,7 @@ class MATTEPAINTER_OT_selectionLasso(bpy.types.Operator):
 
 	# Not Implemented
 	bl_idname = "mattepainter.select_lasso"
-	bl_label = "Selects pixels using a Lasso-style selection"
+	bl_label = "Lasso Fill"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Selects pixels using a Lasso-style selection"
 
@@ -1216,8 +1216,17 @@ def register():
 	wm = bpy.context.window_manager
 	kc = wm.keyconfigs.addon 
 	if kc:
+		# Paste Clipboard
 		km = kc.keymaps.new(name='3D View', space_type='VIEW_3D')
 		kmi = km.keymap_items.new(MATTEPAINTER_OT_newLayerFromClipboard.bl_idname, type='V', value='PRESS', shift=True, ctrl=True)
+		addon_keymaps.append((km, kmi))
+
+		# Brush Tool
+		kmi = km.keymap_items.new(MATTEPAINTER_OT_toolBrush.bl_idname, type='ONE', value='PRESS')
+		addon_keymaps.append((km, kmi))
+
+		# Line Tool
+		kmi = km.keymap_items.new(MATTEPAINTER_OT_toolLine.bl_idname, type='TWO', value='PRESS')
 		addon_keymaps.append((km, kmi))
 
 
