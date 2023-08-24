@@ -867,9 +867,7 @@ class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
 		bpy.ops.paintcurve.add_point(location=mid_point)
 		bpy.ops.paintcurve.add_point(location=mid_point) # Need 2 curves
 
-		MATTEPAINTER_FN_useImageEditor(True)
-
-		
+		MATTEPAINTER_FN_useImageEditor(True)		
 
 		material = self.active_object.data.materials[0]
 		nodes = material.node_tree.nodes
