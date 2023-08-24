@@ -86,11 +86,22 @@ class selectionMarquee2D(bpy.types.Operator):
 
 		return (x_mu, y_mu)	
 
+	def _out_of_bounds_check(self):
+		if self.pixel_coords_down[0] < 0 and self.pixel_coords_up[0] < 0:
+			return False
+		if self.pixel_coords_down[0] > self.image.size[0] and self.pixel_coords_up[0] > self.image.size[0]:
+			return False
+		if self.pixel_coords_down[1] < 0 and self.pixel_coords_up[1] < 0:
+			return False
+		if self.pixel_coords_down[1] > self.image.size[1] and self.pixel_coords_up[1] > self.image.size[1]:
+			return False
+		return True
+
 	def _orient_marquee(self, x1, y1, x2, y2, image):
 		# Orients the Marquee for each potential mouse position
 		# Also runs a boundary check
 		self.x_orient = 'left_to_right' if x1 < x2 else 'right_to_left'
-		self.y_orient = 'bottom_to_top' if y1 < y2 else 'top_to_bottom'
+		self.y_orient = 'bottom_to_top' if y1 < y2 else 'top_to_bottom'	
 
 		if self.x_orient == 'left_to_right':
 			x1 = max(x1, 0)
@@ -104,6 +115,7 @@ class selectionMarquee2D(bpy.types.Operator):
 		else:
 			y1 = min(y1, image.size[1] - 1)
 			y2 = max(y2, 0)
+
 		if x1 > x2:
 			x1, x2 = x2, x1
 		if y1 > y2:
@@ -141,31 +153,30 @@ class selectionMarquee2D(bpy.types.Operator):
 
 	def _fill_pixels(self, x1, y1, x2, y2, brush_color):
 		# Fills the marquee pixels and inserts them into the Image Matrix
-		image = self._get_transparency_mask_image()
-		pixels = np.ones(4 * image.size[0] * image.size[1], dtype=np.float32)
+		
+		pixels_to_paint = np.ones(4 * self.image.size[0] * self.image.size[1], dtype=np.float32)
 
 		# Orient Marquee
-		x1, y1, x2, y2 = self._orient_marquee(x1, y1, x2, y2, image)
+		x1, y1, x2, y2 = self._orient_marquee(x1, y1, x2, y2, self.image)
 
-		image.pixels.foreach_get(pixels)	
+		self.image.pixels.foreach_get(pixels_to_paint)	
 		
 		marquee_height = int(y2 - y1)
 		marquee_width = int(x2 - x1)
 
-		pixels = self._convert_pixel_buffer_to_matrix(pixels, image.size[0], image.size[1], 4)
+		pixels_to_paint = self._convert_pixel_buffer_to_matrix(pixels_to_paint, self.image.size[0], self.image.size[1], 4)
 
-		# Not Pixel Perfect yet (adds 1 to each edge)
 		marquee_fill = np.zeros(4 * marquee_width * marquee_height)
 		marquee_fill = self._convert_pixel_buffer_to_matrix(marquee_fill, marquee_width, marquee_height, 4)		
 
 		marquee_fill[:][:] = brush_color
 
-		pixels[y1:y2, x1:x2, :] = marquee_fill	
+		pixels_to_paint[y1:y2, x1:x2, :] = marquee_fill	
 
-		pixels = self._convert_matrix_to_pixel_buffer(pixels)
+		pixels_to_paint = self._convert_matrix_to_pixel_buffer(pixels_to_paint)
 
-		image.pixels.foreach_set(pixels)
-		image.update()
+		self.image.pixels.foreach_set(pixels_to_paint)
+		self.image.update()
 
 	def _get_2d_mouse_coords(self, context, event):
 		# Calculates current pixel at mouseover point
@@ -196,12 +207,16 @@ class selectionMarquee2D(bpy.types.Operator):
 
 			self.pixel_coords_current = self._get_2d_mouse_coords(context, event)		
 
-		elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+		elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':	
+			self.image = self._get_transparency_mask_image()		
+			self.marquee_end = ((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y)
+			self.pixel_coords_up = self._get_2d_mouse_coords(context, event)	
+
+			# Out of Bounds Check
+			if self._out_of_bounds_check() == False:
+				return{'CANCELLED'}
 
 			brush_color = self._get_color(use_bg=event.ctrl)
-
-			self.marquee_end = ((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y)
-			self.pixel_coords_up = self._get_2d_mouse_coords(context, event)
 
 			self._fill_pixels(self.pixel_coords_down[0], self.pixel_coords_down[1], self.pixel_coords_up[0], self.pixel_coords_up[1], brush_color=brush_color)
 
@@ -239,6 +254,7 @@ class selectionMarquee2D(bpy.types.Operator):
 		self.pixel_coords_up = (0, 0)
 		self.pixel_coords_current = (0, 0)
 		self.mouse_down = False
+		self.image = None
 
 		self.x_orient = ''
 		self.y_orient = ''
