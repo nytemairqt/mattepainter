@@ -328,7 +328,7 @@ class MATTEPAINTER_OT_newLayerFromFile(bpy.types.Operator, ImportHelper):
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
 		active_object.data.materials.append(material)
-		material.blend_method = "HASHED"
+		material.blend_method = "BLEND"
 		material.shadow_method = "CLIP"
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
@@ -380,7 +380,7 @@ class MATTEPAINTER_OT_newEmptyPaintLayer(bpy.types.Operator):
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
 		active_object.data.materials.append(material)
-		material.blend_method = "HASHED"
+		material.blend_method = "BLEND"
 		material.shadow_method = "CLIP"
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
@@ -442,7 +442,7 @@ class MATTEPAINTER_OT_newLayerFromClipboard(bpy.types.Operator):
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
 		active_object.data.materials.append(material)
-		material.blend_method = "HASHED"
+		material.blend_method = "BLEND"
 		material.shadow_method = "CLIP"
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
@@ -1411,7 +1411,7 @@ def register():
 		addon_keymaps.append((km, kmi))
 
 		# Line Tool
-		kmi = km.keymap_items.new(MATTEPAINTER_OT_toolLine.bl_idname, type='L', value='PRESS', shift=True)
+		kmi = km.keymap_items.new(MATTEPAINTER_OT_toolLine.bl_idname, type='B', value='PRESS', shift=True)
 		addon_keymaps.append((km, kmi))
 
 		# Fill All
