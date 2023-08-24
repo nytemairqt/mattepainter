@@ -149,18 +149,19 @@ class selectionMarquee2D(bpy.types.Operator):
 
 		image.pixels.foreach_get(pixels)	
 		
-		marquee_height = int(y2 - y1) + 1
-		marquee_width = int(x2 - x1) + 1	
+		marquee_height = int(y2 - y1)
+		marquee_width = int(x2 - x1)
 
 		pixels = self._convert_pixel_buffer_to_matrix(pixels, image.size[0], image.size[1], 4)
 
+		# Not Pixel Perfect yet (adds 1 to each edge)
 		marquee_fill = np.zeros(4 * marquee_width * marquee_height)
 		marquee_fill = self._convert_pixel_buffer_to_matrix(marquee_fill, marquee_width, marquee_height, 4)		
 
 		brush_color = self._get_color()
 		marquee_fill[:][:] = brush_color
 
-		pixels[y1:y2+1, x1:x2+1, :] = marquee_fill		
+		pixels[y1:y2, x1:x2, :] = marquee_fill	
 
 		pixels = self._convert_matrix_to_pixel_buffer(pixels)
 
