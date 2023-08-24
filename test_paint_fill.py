@@ -74,10 +74,6 @@ def drawMarqueeCallback(self, context):
 		blf.size(font_id, 12)
 		blf.draw(font_id, f'{self.pixel_coords_current}')
 
-
-
-
-
 class selectionMarquee2D(bpy.types.Operator):
 	bl_idname = "fill_tool.select_marquee_2d"
 	bl_label = "Marquee Fill"
@@ -91,11 +87,10 @@ class selectionMarquee2D(bpy.types.Operator):
 		return (x_mu, y_mu)	
 
 	def _orient_marquee(self, x1, y1, x2, y2, image):
-
+		# Orients the Marquee for each potential mouse position
+		# Also runs a boundary check
 		self.x_orient = 'left_to_right' if x1 < x2 else 'right_to_left'
 		self.y_orient = 'bottom_to_top' if y1 < y2 else 'top_to_bottom'
-
-		print(self.x_orient, self.y_orient)
 
 		if self.x_orient == 'left_to_right':
 			x1 = max(x1, 0)
@@ -109,31 +104,33 @@ class selectionMarquee2D(bpy.types.Operator):
 		else:
 			y1 = min(y1, image.size[1] - 1)
 			y2 = max(y2, 0)
-
 		if x1 > x2:
 			x1, x2 = x2, x1
 		if y1 > y2:
 			y1, y2 = y2, y1
 
 		return x1, y1, x2, y2
-		
 
 	def _convert_pixel_buffer_to_matrix(self, buffer, width, height, channels):
+		# Converts a 1-D pixel buffer into an xy grid with n Colour channels
 		buffer = buffer.reshape(height, width, channels)
 		return buffer
 
 	def _convert_matrix_to_pixel_buffer(self, buffer):
+		# Converts back to 1-D pixel buffer
 		buffer = buffer.flatten()
 		return buffer
 
-	def _set_pixel(self, buffer, x, y, value):
-		# need to pull colours
-		buffer[y][x][0] = value
-		buffer[y][x][1] = value
-		buffer[y][x][2] = value
-		buffer[y][x][3] = value
+	def _get_color(self):
+		# Grabs active Paint Brush colour 
+		r = bpy.context.tool_settings.image_paint.brush.color[0]
+		g = bpy.context.tool_settings.image_paint.brush.color[1]
+		b = bpy.context.tool_settings.image_paint.brush.color[2]
+		a = bpy.context.tool_settings.image_paint.brush.strength
+		return [r, g, b, a]
 
 	def _get_transparency_mask_image(self):
+		# Selects the mask layer
 		active_object = bpy.context.active_object
 		material = active_object.data.materials[0]
 		nodes = material.node_tree.nodes
@@ -143,6 +140,7 @@ class selectionMarquee2D(bpy.types.Operator):
 		return image
 
 	def _fill_pixels(self, x1, y1, x2, y2):
+		# Fills the marquee pixels and inserts them into the Image Matrix
 		image = self._get_transparency_mask_image()
 		pixels = np.ones(4 * image.size[0] * image.size[1], dtype=np.float32)
 
@@ -159,6 +157,9 @@ class selectionMarquee2D(bpy.types.Operator):
 		marquee_fill = np.zeros(4 * marquee_width * marquee_height)
 		marquee_fill = self._convert_pixel_buffer_to_matrix(marquee_fill, marquee_width, marquee_height, 4)		
 
+		brush_color = self._get_color()
+		marquee_fill[:][:] = brush_color
+
 		pixels[y1:y2+1, x1:x2+1, :] = marquee_fill		
 
 		pixels = self._convert_matrix_to_pixel_buffer(pixels)
@@ -166,12 +167,8 @@ class selectionMarquee2D(bpy.types.Operator):
 		image.pixels.foreach_set(pixels)
 		image.update()
 
-	def _cleanup_curve(self, points):
-		for point in points:
-			bpy.ops.paintcurve.select(location=point)
-			bpy.ops.paintcurve.delete_point()
-
 	def _get_2d_mouse_coords(self, context, event):
+		# Calculates current pixel at mouseover point
 		region = context.region
 		reg_x, reg_y = event.mouse_region_x, event.mouse_region_y
 		img_size = context.area.spaces[0].image.size
