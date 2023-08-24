@@ -121,25 +121,25 @@ class selectionMarquee2D(bpy.types.Operator):
 		buffer = buffer.flatten()
 		return buffer
 
-	def _get_color(self):
+	def _get_color(self, use_bg=False):
 		# Grabs active Paint Brush colour 
-		r = bpy.context.tool_settings.image_paint.brush.color[0]
-		g = bpy.context.tool_settings.image_paint.brush.color[1]
-		b = bpy.context.tool_settings.image_paint.brush.color[2]
+		r = bpy.context.tool_settings.image_paint.brush.color[0] if use_bg==False else bpy.context.tool_settings.image_paint.brush.secondary_color[0]
+		g = bpy.context.tool_settings.image_paint.brush.color[1] if use_bg==False else bpy.context.tool_settings.image_paint.brush.secondary_color[1]
+		b = bpy.context.tool_settings.image_paint.brush.color[2] if use_bg==False else bpy.context.tool_settings.image_paint.brush.secondary_color[2]
 		a = bpy.context.tool_settings.image_paint.brush.strength
 		return [r, g, b, a]
 
 	def _get_transparency_mask_image(self):
 		# Selects the mask layer
-		active_object = bpy.context.active_object
-		material = active_object.data.materials[0]
+		self.active_object = bpy.context.active_object
+		material = self.active_object.data.materials[0]
 		nodes = material.node_tree.nodes
 		mask = nodes.get("transparency_mask")
 		image = mask.image 
 
 		return image
 
-	def _fill_pixels(self, x1, y1, x2, y2):
+	def _fill_pixels(self, x1, y1, x2, y2, brush_color):
 		# Fills the marquee pixels and inserts them into the Image Matrix
 		image = self._get_transparency_mask_image()
 		pixels = np.ones(4 * image.size[0] * image.size[1], dtype=np.float32)
@@ -158,7 +158,6 @@ class selectionMarquee2D(bpy.types.Operator):
 		marquee_fill = np.zeros(4 * marquee_width * marquee_height)
 		marquee_fill = self._convert_pixel_buffer_to_matrix(marquee_fill, marquee_width, marquee_height, 4)		
 
-		brush_color = self._get_color()
 		marquee_fill[:][:] = brush_color
 
 		pixels[y1:y2, x1:x2, :] = marquee_fill	
@@ -199,18 +198,12 @@ class selectionMarquee2D(bpy.types.Operator):
 
 		elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
 
+			brush_color = self._get_color(use_bg=event.ctrl)
+
 			self.marquee_end = ((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y)
 			self.pixel_coords_up = self._get_2d_mouse_coords(context, event)
 
-			start_time = time.process_time()
-
-			self._fill_pixels(self.pixel_coords_down[0], self.pixel_coords_down[1], self.pixel_coords_up[0], self.pixel_coords_up[1])
-
-			end_time = time.process_time()
-
-			elapsed_time = end_time - start_time
-
-			print(f'Time: {elapsed_time}')
+			self._fill_pixels(self.pixel_coords_down[0], self.pixel_coords_down[1], self.pixel_coords_up[0], self.pixel_coords_up[1], brush_color=brush_color)
 
 			bpy.types.SpaceImageEditor.draw_handler_remove(self._handle, 'WINDOW')				
 			return{'FINISHED'}
@@ -240,7 +233,6 @@ class selectionMarquee2D(bpy.types.Operator):
 		
 	def invoke(self, context, event):	
 		self.mouse_positions = []		
-		self._mouseover_positions = []
 		self.marquee_start = (0, 0)
 		self.marquee_end = (0, 0)
 		self.pixel_coords_down = (0, 0)
