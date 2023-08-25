@@ -94,14 +94,14 @@ class selectionMarquee3D(bpy.types.Operator):
 
 	def _out_of_bounds_check(self):
 		if self.mouse_positions[0][0] < self.top_left_2d[0] and self.mouse_positions[1][0] < self.top_left_2d[0]:
-			return False
+			return True
 		if self.mouse_positions[0][0] > self.bottom_right_2d[0] and self.mouse_positions[1][0] > self.bottom_right_2d[0]:
-			return False
+			return True
 		if self.mouse_positions[0][1] < self.bottom_right_2d[1] and self.mouse_positions[1][1] < self.bottom_right_2d[1]:
-			return False
+			return True
 		if self.mouse_positions[0][1] > self.top_left_2d[1] and self.mouse_positions[1][1] > self.top_left_2d[1]:
-			return False
-		return True
+			return True
+		return False
 
 	def _orient_marquee(self, x1, y1, x2, y2, image):
 
@@ -112,15 +112,15 @@ class selectionMarquee3D(bpy.types.Operator):
 
 		if self.x_orient == 'left_to_right':
 			x1 = max(x1, 0)
-			x2 = min(x2, image.size[0] - 1)
+			x2 = min(x2, image.size[0])
 		else:
-			x1 = min(x1, image.size[0] - 1)
+			x1 = min(x1, image.size[0])
 			x2 = max(x2, 0)
 		if self.y_orient == 'bottom_to_top':
-			y1 = max(y1, 0)
-			y2 = min(y2, image.size[1] - 1)
+			y1 = max(y1, 0)			
+			y2 = min(y2, image.size[1])
 		else:
-			y1 = min(y1, image.size[1] - 1)
+			y1 = min(y1, image.size[1])
 			y2 = max(y2, 0)
 
 		if x1 > x2:
@@ -185,40 +185,36 @@ class selectionMarquee3D(bpy.types.Operator):
 	def _fill_pixels(self, x1, y1, x2, y2, brush_color):
 		# Fills the marquee pixels and inserts them into the Image Matrix
 		
+		# Create a 1D Pixel Buffer that matches our Image
 		pixels_to_paint = np.ones(4 * self.image.size[0] * self.image.size[1], dtype=np.float32)
-
-		# Orient Marquee
-		#x1, y1, x2, y2 = self._orient_marquee(x1, y1, x2, y2, self.image)
-
 		self.image.pixels.foreach_get(pixels_to_paint)	
 		
+		# Calculate Marquee Size
 		marquee_height = int(y2 - y1)
 		marquee_width = int(x2 - x1)
 
+		# Convert 1D Pixel Buffer into Matrix
 		pixels_to_paint = self._convert_pixel_buffer_to_matrix(pixels_to_paint, self.image.size[0], self.image.size[1], 4)
 
+		# Create our Marquee
 		marquee_fill = np.zeros(4 * marquee_width * marquee_height)
 		marquee_fill = self._convert_pixel_buffer_to_matrix(marquee_fill, marquee_width, marquee_height, 4)		
 
+		# Fill Marquee with Color
 		marquee_fill[:][:] = brush_color
 
+		# Insert Marquee into Pixel Matrix
 		pixels_to_paint[y1:y2, x1:x2, :] = marquee_fill	
 
+		# Convert Back
 		pixels_to_paint = self._convert_matrix_to_pixel_buffer(pixels_to_paint)
 
+		# Update image from modified pixel buffer
 		self.image.pixels.foreach_set(pixels_to_paint)
 		self.image.update()
 
-	def _in_bounds(self, check_position, top_left_corner, bottom_right_corner):
-		mouse_x, mouse_y = check_position
-		min_x, max_y = top_left_corner
-		max_x, min_y = bottom_right_corner
-		if mouse_x > min_x and mouse_x < max_x and mouse_y > min_y and mouse_y < max_y:
-			return True 
-		else:
-			return False	
-
 	def _calculate_pixel_offset(self, x1, y1, x2, y2):
+		# Calculates relative pixel offset (screen-based)
 		x1 = (x1 - self.top_left_2d[0]) / self.width_2d
 		y1 = (y1 - self.bottom_right_2d[1]) / self.height_2d
 		x2 = (x2 - self.top_left_2d[0]) / self.width_2d
@@ -227,6 +223,7 @@ class selectionMarquee3D(bpy.types.Operator):
 		return x1, y1, x2, y2
 
 	def _convert_pixel_offset_to_2d_positions(self, x1, y1, x2, y2):
+		# converts 2d percentage offset to actual pixel values
 		x1 = int(x1 * self.image.size[0])
 		y1 = int(y1 * self.image.size[1])
 		x2 = int(x2 * self.image.size[0])
@@ -234,10 +231,12 @@ class selectionMarquee3D(bpy.types.Operator):
 		return x1, y1, x2, y2
 
 	def _get_2d_mouse_coords(self, context, event):
+		# returns pixel coords of event
 		coords = ((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y)		
 		return coords
 
 	def _refresh_viewport(self):
+		# manually refreshes the viewport
 		bpy.context.scene.update_tag()
 
 	@classmethod
@@ -267,7 +266,7 @@ class selectionMarquee3D(bpy.types.Operator):
 			x1, y1, x2, y2 = self._orient_marquee_3d(x1, y1, x2, y2)			
 
 			# Out of Bounds Check
-			if self._out_of_bounds_check() == False:
+			if self._out_of_bounds_check() == True:
 				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')	
 				bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
 				return{'CANCELLED'}		
@@ -286,7 +285,7 @@ class selectionMarquee3D(bpy.types.Operator):
 			# Refresh viewport (doesn't update automatically)
 			self._refresh_viewport()
 
-			# Kill draw_handler
+			# Kill draw_handler and reset origin
 			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 			bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
 
@@ -338,8 +337,6 @@ class selectionMarquee3D(bpy.types.Operator):
 		self.top_left_2d = view3d_utils.location_3d_to_region_2d(self.region, self.region3d, self.top_left)
 		self.bottom_right = self.vertices[1].co
 		self.bottom_right_2d = view3d_utils.location_3d_to_region_2d(self.region, self.region3d, self.bottom_right)
-
-
 
 		# Use Vertices to Calculate Screen-Based Area of Object
 		self.width_2d = self.bottom_right_2d[0] - self.top_left_2d[0]
