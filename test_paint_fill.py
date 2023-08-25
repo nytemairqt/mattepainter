@@ -269,6 +269,7 @@ class selectionMarquee3D(bpy.types.Operator):
 			# Out of Bounds Check
 			if self._out_of_bounds_check() == False:
 				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')	
+				bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
 				return{'CANCELLED'}		
 
 			# Calculate pixel offset relative to Plane
@@ -287,6 +288,7 @@ class selectionMarquee3D(bpy.types.Operator):
 
 			# Kill draw_handler
 			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+			bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
 
 			return{'FINISHED'}
 
@@ -299,6 +301,8 @@ class selectionMarquee3D(bpy.types.Operator):
 
 		elif event.type in {'RIGHTMOUSE', 'ESC'}:
 			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')	
+			bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
+
 			self.mouse_down = False
 			
 			return {'FINISHED'}
