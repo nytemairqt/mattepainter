@@ -56,7 +56,7 @@ def drawMarqueeCallback(self, context):
 		shader.uniform_float("color", (0.0, 0.0, 0.0, 0.4))
 		batch.draw(shader)	
 
-		'''
+		
 
 		# DEBUG
 
@@ -78,7 +78,7 @@ def drawMarqueeCallback(self, context):
 		blf.position(font_id, end_vert[0] + 50, end_vert[1] - 40, 0)
 		blf.size(font_id, 12)
 		blf.draw(font_id, f'{self.pixel_coords_current}')
-		'''
+			
 
 class selectionMarquee3D(bpy.types.Operator):
 	bl_idname = "fill_tool.select_marquee_3d"
@@ -104,6 +104,7 @@ class selectionMarquee3D(bpy.types.Operator):
 		return True
 
 	def _orient_marquee(self, x1, y1, x2, y2, image):
+
 		# Orients the Marquee for each potential mouse position
 		# Also runs a boundary check
 		self.x_orient = 'left_to_right' if x1 < x2 else 'right_to_left'
@@ -130,22 +131,21 @@ class selectionMarquee3D(bpy.types.Operator):
 		return x1, y1, x2, y2
 
 	def _orient_marquee_3d(self, x1, y1, x2, y2):
-		# Orients the Marquee for each potential mouse position
-		# Also runs a boundary check
 		self.x_orient = 'left_to_right' if x1 < x2 else 'right_to_left'
 		self.y_orient = 'bottom_to_top' if y1 < y2 else 'top_to_bottom'	
 
 		if self.x_orient == 'left_to_right':
 			x1 = max(x1, 0)
-			x2 = min(x2, self.width_2d - 1)
+			x2 = min(x2, self.width_2d + self.top_left_2d[0] - 1) # need to add screen offset
 		else:
-			x1 = min(x1, self.width_2d - 1)
+			x1 = min(x1, self.width_2d + self.top_left_2d[0] - 1)
 			x2 = max(x2, 0)
+
 		if self.y_orient == 'bottom_to_top':
 			y1 = max(y1, 0)
-			y2 = min(y2, self.height_2d - 1)
+			y2 = min(y2, self.height_2d + self.bottom_right_2d[1] - 1)
 		else:
-			y1 = min(y1, self.height_2d - 1)
+			y1 = min(y1, self.height_2d + self.bottom_right_2d[1] - 1)
 			y2 = max(y2, 0)
 
 		if x1 > x2:
@@ -219,7 +219,6 @@ class selectionMarquee3D(bpy.types.Operator):
 			return False	
 
 	def _calculate_pixel_offset(self, x1, y1, x2, y2):
-
 		x1 = (x1 - self.top_left_2d[0]) / self.width_2d
 		y1 = (y1 - self.bottom_right_2d[1]) / self.height_2d
 		x2 = (x2 - self.top_left_2d[0]) / self.width_2d
@@ -238,9 +237,11 @@ class selectionMarquee3D(bpy.types.Operator):
 		coords = ((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y)		
 		return coords
 
+	def _refresh_viewport(self):
+		bpy.context.scene.update_tag()
+
 	@classmethod
 	def poll(cls, context):
-		#return bpy.context.space_data.ui_mode in ['PAINT']
 		return context.mode in ['PAINT_TEXTURE']
 
 	def modal(self, context:bpy.types.Context, event:bpy.types.Event):
@@ -259,22 +260,33 @@ class selectionMarquee3D(bpy.types.Operator):
 		elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':	
 			self.mouse_positions[1] = self._get_2d_mouse_coords(context, event)
 
-			x1, y1, x2, y2 = self._orient_marquee_3d(self.mouse_positions[0][0], self.mouse_positions[0][1], self.mouse_positions[1][0], self.mouse_positions[1][1])			
+			x1, y1 = self.mouse_positions[0]
+			x2, y2 = self.mouse_positions[1]
+
+			# Orient Marquee			
+			x1, y1, x2, y2 = self._orient_marquee_3d(x1, y1, x2, y2)			
 
 			# Out of Bounds Check
 			if self._out_of_bounds_check() == False:
-				#bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')	
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')	
 				return{'CANCELLED'}		
 
+			# Calculate pixel offset relative to Plane
 			x1, y1, x2, y2 = self._calculate_pixel_offset(x1, y1, x2, y2)	
+
+			# Convert offset percentage to real pixel position values
 			x1, y1, x2, y2 = self._convert_pixel_offset_to_2d_positions(x1, y1, x2, y2)
 
+			# Pull Brush Colour and Paint
 			brush_color = self._get_color(use_bg=event.ctrl)
+			# use try: exempt to avoid the draw_handler remaining if marquee fails
 			self._fill_pixels(x1, y1, x2, y2, brush_color=brush_color)
-			#self._fill_pixels(self.pixel_coords_down[0], self.pixel_coords_down[1], self.pixel_coords_up[0], self.pixel_coords_up[1], brush_color=brush_color)
 
-			#bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+			# Refresh viewport (doesn't update automatically)
+			self._refresh_viewport()
 
+			# Kill draw_handler
+			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
 
 			return{'FINISHED'}
 
@@ -283,17 +295,10 @@ class selectionMarquee3D(bpy.types.Operator):
 			self.mouse_down = True		
 			self.pixel_coords_down = self._get_2d_mouse_coords(context, event)
 			self.mouse_positions.append(self.pixel_coords_down)
-			self.mouse_positions.append(self.pixel_coords_down) # Need to append twice.
-
-			# calculate pixel-size of plane with respect to 3d view
-			# calculate click offset with respect to pixel-size 
-			# run marquee on offset * image size
-
-			#return{'FINISHED'}
-			
+			self.mouse_positions.append(self.pixel_coords_down) # Need to append twice.			
 
 		elif event.type in {'RIGHTMOUSE', 'ESC'}:
-			#bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')	
+			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')	
 			self.mouse_down = False
 			
 			return {'FINISHED'}
@@ -330,19 +335,16 @@ class selectionMarquee3D(bpy.types.Operator):
 		self.bottom_right = self.vertices[1].co
 		self.bottom_right_2d = view3d_utils.location_3d_to_region_2d(self.region, self.region3d, self.bottom_right)
 
+
+
 		# Use Vertices to Calculate Screen-Based Area of Object
 		self.width_2d = self.bottom_right_2d[0] - self.top_left_2d[0]
 		self.height_2d = self.top_left_2d[1] - self.bottom_right_2d[1]
 		self.scale_2d = (self.width_2d, self.height_2d)
 
 		args = (self, context)
-		#self._handle = bpy.types.SpaceView3D.draw_handler_add(drawMarqueeCallback, args, 'WINDOW', 'POST_PIXEL')
+		self._handle = bpy.types.SpaceView3D.draw_handler_add(drawMarqueeCallback, args, 'WINDOW', 'POST_PIXEL')
 		
-
-
-
-
-
 		context.window_manager.modal_handler_add(self)
 		return {'RUNNING_MODAL'}		
 
