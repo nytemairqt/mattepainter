@@ -179,8 +179,102 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	if not mask == None:
 		node_mask.location = Vector((-1100.0, 200.0))
 
+
+def MATTEPAINTER_FN_rayCast(raycast_data):
+	mouse_x, context_x, mouse_y, context_y = raycast_data
+	mouse_position = Vector(((mouse_x) - context_x, mouse_y - context_y))
+	region = bpy.context.region 
+	region_data = bpy.context.region_data
+	ray_vector = view3d_utils.region_2d_to_vector_3d(region, region_data, mouse_position)
+	ray_origin = view3d_utils.region_2d_to_origin_3d(region, region_data, mouse_position)
+	direction = ray_origin + (ray_vector * 1000)
+	direction -= ray_origin
+	result, location, normal, index, obj, matrix = bpy.context.scene.ray_cast(bpy.context.view_layer.depsgraph, ray_origin, direction)
+
+	return result, location, normal, index, obj, matrix
+
+def MATTEPAINTER_FN_convertToStroke(name, is_start=False, mouse=(0,0), brush_size=1, time=0.0):
+	stroke = {"name": name,
+				"is_start": is_start,
+				"location": (0,0,0),
+				"mouse":mouse,
+				"mouse_event":(0,0),
+				"pen_flip":False,
+				"pressure":1.0,
+				"size":brush_size,
+				"time":time,
+				"x_tilt":0.0,
+				"y_tilt":0.0}
+	return stroke
+
 def MATTEPAINTER_FN_contextOverride(area_to_check):
 	return [area for area in bpy.context.screen.areas if area.type == area_to_check][0]
+
+def get_override(area_type, region_type):
+	for area in bpy.context.screen.areas: 
+		if area.type == area_type:             
+			for region in area.regions:                 
+				if region.type == region_type:                    
+					override = {'area': area, 'region': region} 
+					return override
+
+def MATTEPAINTER_FN_useImageEditor(use_image_editor=True):
+	for area in bpy.context.screen.areas:
+		if use_image_editor and area.type=='VIEW_3D':
+			area.type = 'IMAGE_EDITOR'
+			bpy.context.space_data.ui_mode = 'PAINT'
+		elif use_image_editor==False and area.type=='IMAGE_EDITOR':
+			area.type = 'VIEW_3D'	
+
+def MATTEPAINTER_FN_get2DCoords(self, context):
+	# get vertex 0 (bottom left)
+	# get vertex 2 (i think 2, top right)
+	# calculate screen-space area 
+	# if in bounds (marquee start)
+		# 
+	return (0, 0)
+
+def MATTEPAINTER_FN_shrinkSelection(self, context):
+	# need to grab the min X, max X, min Y, max Y of selection
+	# calculate the mid point
+	# then run a for loop
+	# if x is less than midpoint
+		# move point of curve 1 x
+	# if x is more than midpoint
+		# move point of curve -1 x 
+	# if x == midpoint
+		# do nothing
+	# repeat for Y
+	# this function needs to be called AFTER the paint bucket fill is done
+	return 
+
+def MATTEPAINTER_FN_drawMarqueeCallback(self, context):
+	if self.mouse_down:
+		start_vert, end_vert = self.mouse_positions
+
+		corner_vert_a = (self.mouse_positions[0][0], self.mouse_positions[1][1])
+		corner_vert_b = (self.mouse_positions[1][0], self.mouse_positions[0][1])
+		verts = (start_vert, corner_vert_a, corner_vert_b, end_vert)
+		indices = ((0, 1, 2), (1, 2, 3))
+		shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+		gpu.state.blend_set('ALPHA')
+		gpu.state.line_width_set(2.0)
+		batch = batch_for_shader(shader, 'TRIS', {"pos": verts}, indices=indices)
+		shader.uniform_float("color", (0.0, 0.0, 0.0, 0.4))
+		batch.draw(shader)	
+		gpu.state.line_width_set(1.0)
+		gpu.state.blend_set('NONE')   	
+
+def MATTEPAINTER_FN_drawLassoCallback(self, context):
+	# This draws pixels onto the screen directly, used for Lasso and Marquee selection
+	shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+	gpu.state.blend_set('ALPHA')
+	gpu.state.line_width_set(2.0)
+	batch = batch_for_shader(shader, 'LINE_STRIP', {"pos": self.mouse_path})
+	shader.uniform_float("color", (0.0, 0.0, 0.0, 0.7))
+	batch.draw(shader)	
+	gpu.state.line_width_set(1.0)
+	gpu.state.blend_set('NONE')
 
 #--------------------------------------------------------------
 # Layer Creation
@@ -616,6 +710,30 @@ class MATTEPAINTER_OT_clearUnused(bpy.types.Operator):
 		#self.report({"INFO"}, "Purged unused data.")
 		return {'FINISHED'}
 
+class MATTEPAINTER_OT_bakeProjection(bpy.types.Operator):
+	# Bakes the Emit information from a texture into a new Image.
+	bl_idname = "mattepainter.clear_unused"
+	bl_label = "Purges unused Data Blocks."
+	bl_description = "Bakes a Window-Based UV projection into a new Texture for 3D Projections."
+	bl_options = {"REGISTER", "UNDO"}
+
+
+	def execute(self, context):
+		# IMPORTANT need to add a safety check to make sure we have an empty image selected
+		# IMPORTANT also need a safety check to make sure we're in camera view
+		# smart UV project object
+		# get node tree
+		# create an image tex node
+		# create an image file
+			# set the image resolution to current image texture (emit input)
+		# if in eevee, switch to Cycles
+		# set TextureCoord to Window, set Repeat to Clip in Image
+		# jump to CAMERA VIEW
+		# bake texture
+		# return to previous view, return to previous Render Engine
+		# 
+		return{'FINISHED'}
+
 #--------------------------------------------------------------
 # ____NOT_IMPLEMENTED
 #--------------------------------------------------------------
@@ -650,9 +768,424 @@ class MATTEPAINTER_OT_toolLine(bpy.types.Operator):
 		bpy.data.brushes["TexDraw"].stroke_method = 'LINE'
 		return {'FINISHED'}
 
+class MATTEPAINTER_OT_selectionMarquee(bpy.types.Operator):
+
+	# https://www.youtube.com/watch?v=YRwToPPGaZU WATCH THIS 100 TIMES
+	# TLDR: fill tool works in 2d
+	# bpy.ops.paintcurve.select(location=(232, 395))
+
+	# blender's internal 2d paint fill is called: paint_2d_bucket_fill
+	# https://blender.stackexchange.com/questions/46467/incorrect-context-bpy-ops-paint-image-paintmode-normal-stroke-none
+
+	bl_idname = "mattepainter.select_marquee"
+	bl_label = "Marquee Fill"
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Selects pixels using a Marquee-style selection"
+
+	mouse_down = False
+
+	def _set_pixel(x, y, width, colour):
+		offset = (x + int(y*width)) * 4
+		for i in range(4):
+			image.pixels[offset+i] = colour
+
+	def _in_bounds(self, check_position, top_left_corner, bottom_right_corner):
+		mouse_x, mouse_y = check_position
+		min_x, max_y = top_left_corner
+		max_x, min_y = bottom_right_corner
+		if mouse_x > min_x and mouse_x < max_x and mouse_y > min_y and mouse_y < max_y:
+			return True 
+		else:
+			return False
+
+	def _calculate_screen_space_offset(self, position, x):
+		offset_x = start_position[0] - top_left_2d[0]
+		offset_x_percentage = (offset_x / scale_2d[0])
+		return
+
+	def _fill_marquee(self):
+		'''
+		OKAY HERE ARE THE WORKING STEPS:
+
+		**** there might be a better way to handle resolution, if I can copy the exact Framing/Zoom of the 3D View into the Image Editor
+
+		1. after marquee curve is Painted, remove all but 2 points (need to have 2)
+		2. Move those 2 points into the MIDDLE of the marquee
+		3. switch to fill tool
+		4. set fill tool Stroke to Curve
+		5. load the same Curve that we just made
+		6. use bpy.ops.paintcurve.draw()
+		7. revert tools, delete curve etc etc cleanup etc
+
+		'''
+
+		bpy.ops.wm.tool_set_by_id(name="builtin_brush.Fill")
+		stroke = [{"name": "", "is_start": True, "location": (0,0,0), "mouse":(0,0), "mouse_event":(0,0), "pen_flip":False, "pressure":1.0, "size":3, "time":0, "x_tilt":0.0, "y_tilt":0.0}]
+		bpy.context.window.cursor_warp(400, 400)
+		bpy.ops.paint.image_paint()
+	
+
+	def _draw_marquee(self):
+		# Frame selected in 3D_VIEW
+		bpy.ops.view3d.view_selected(use_all_regions=False)
+		previous_stroke_method = bpy.context.tool_settings.image_paint.brush.stroke_method
+		previous_falloff = bpy.context.tool_settings.image_paint.brush.curve_preset
+
+		bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
+		bpy.context.tool_settings.image_paint.brush.stroke_method = 'CURVE'
+
+		bpy.ops.paintcurve.new()		
+		paint_curve = bpy.data.paint_curves[-1]
+
+		paint_curve.name = "MATTEPAINTER_MarqueeCurve"
+
+		bpy.context.tool_settings.image_paint.brush.curve_preset = 'CONSTANT'
+
+		marquee_corner_a = (self.marquee_start[0], self.marquee_end[1])
+		marquee_corner_b = (self.marquee_end[0], self.marquee_start[1])
+
+		locations = [self.marquee_start, marquee_corner_a, self.marquee_end, marquee_corner_b, self.marquee_start]
+
+		# Frame Selected
+		bpy.ops.image.view_all()
+
+		for location in locations:
+			bpy.ops.paintcurve.add_point(location=location)
+
+		bpy.ops.paintcurve.draw()	
+
+		# New fill method using Curves
+
+		for location in locations:
+			bpy.ops.paintcurve.select(location=location)
+			bpy.ops.paintcurve.delete_point()
+
+		mid_point = self.marquee_end[0] - self.marquee_start[0]
+		mid_point += self.marquee_start[0]
+		mid_point = (mid_point, self.marquee_start[1])
+
+		bpy.ops.paintcurve.add_point(location=mid_point)
+		bpy.ops.paintcurve.add_point(location=mid_point) # Need 2 curves
+
+		MATTEPAINTER_FN_useImageEditor(True)		
+
+		material = self.active_object.data.materials[0]
+		nodes = material.node_tree.nodes
+		links = material.node_tree.links
+
+		mask = nodes.get("transparency_mask")
+		mask_image = mask.image 
+
+		#mouse_pos = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
+
+		self._fill_marquee()
+
+		MATTEPAINTER_FN_useImageEditor(False)
+
+		# Return settings to previous state and delete curve		
+		bpy.context.tool_settings.image_paint.brush.paint_curve = None
+		bpy.context.tool_settings.image_paint.brush.stroke_method = previous_stroke_method
+		bpy.context.tool_settings.image_paint.brush.curve_preset = previous_falloff		
+
+		'''
+
+		if self._in_bounds(self.marquee_start, self.top_left_2d, self.bottom_right_2d):
+			offset_x = self.marquee_start[0] - self.top_left_2d[0]
+			offset_x_percentage = (offset_x / self.scale_2d[0])
+			window = context.window_manager.windows[0]
+			# need to get active image
+			material = self.active_object.data.materials[0]
+			nodes = material.node_tree.nodes
+			links = material.node_tree.links
+
+			mask = nodes.get("transparency_mask")
+			mask_image = mask.image 
+
+			local_x = int(mask.image.size[0] * offset_x_percentage)
+			local_y = int(mask.image.size[1] * .5)
+
+		
+
+		
+
+		elif self._in_bounds(marquee_corner_a, self.top_left_2d, self.bottom_right_2d):
+			print('Corner A in Bounds')
+		elif self._in_bounds(self.marquee_end, self.top_left_2d, self.bottom_right_2d):
+			print('Mouse Up in Bounds')
+		elif self._in_bounds(marquee_corner_b, self.top_left_2d, self.bottom_right_2d):
+			print('Corner B in Bounds')
+		else:
+			print('no corners in bounds')
+		'''
+
+
+
+	@classmethod
+	def poll(cls, context):
+		return context.mode in ['PAINT_TEXTURE']
+
+	def modal(self, context:bpy.types.Context, event:bpy.types.Event):
+		context.area.tag_redraw()
+		
+
+		if event.type == 'MOUSEMOVE' and self.mouse_down:
+
+			mouse_current_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y)) 
+			self.mouse_positions[1] = mouse_current_position
+
+			marquee_width = self.mouse_positions[1][0] - self.mouse_positions[0][0]
+			marquee_height = self.mouse_positions[0][1] - self.mouse_positions[1][1]		
+
+		elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+
+			self.marquee_end = ((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y)
+
+			self._draw_marquee()	
+
+			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')				
+			return{'FINISHED'}
+
+		elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+
+			# Setup basic logic
+			self.mouse_down = True
+			area = MATTEPAINTER_FN_contextOverride("VIEW_3D")
+			bpy.context.temp_override(area=area)	
+			
+
+			# dont think I need this anymore
+			for area in bpy.context.screen.areas:
+			    if area.type=='VIEW_3D':
+			        X= area.x
+			        Y= area.y
+			        WIDTH=area.width
+			        HEIGHT=area.height		
+			
+			# Grab Mouse Down vector			
+			mouse_down_position = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
+			self.mouse_positions.append(mouse_down_position)
+			self.mouse_positions.append(mouse_down_position) # Not a mistake, need to append twice
+			start_position = self.mouse_positions[0]			
+			
+			
+
+			# Check if click was inside object
+			in_bounds = self._in_bounds(start_position, self.top_left_2d, self.bottom_right_2d)			
+
+			self.marquee_start = ((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y)
+
+			
+
+			'''
+
+			if in_bounds:
+				# calculate where in object click happened
+				print(f'Area of Clicked Object: {scale_2d}')
+
+				# mouse x - left edge distance from 0 
+
+				offset_x = start_position[0] - top_left_2d[0]
+				offset_x_percentage = (offset_x / scale_2d[0])
+
+				print(f'Offset in pixels: {offset_x}')
+				print(f'Offset in % : {offset_x_percentage * 100}%')
+
+				active_object = bpy.context.active_object
+				material = active_object.data.materials[0]
+				nodes = material.node_tree.nodes
+				mask = nodes.get("transparency_mask")
+				image = mask.image 
+				width = image.size[0]
+				height = image.size[1]
+				colour = (0.0, 0.0, 0.0, 1.0)
+				pixels = [1.0] * (4 * width * height)
+				print(len(image.pixels))
+				#pixels = image.pixels[:]
+
+				num_pixels = len(pixels)
+				num_pixels_to_change = int(num_pixels * offset_x_percentage)
+
+				for i in range(num_pixels_to_change, num_pixels):
+					pixels[i] = 0.0
+
+				image.pixels = pixels
+				# pixels are calculated from bottom row left to right
+				# alpha clip resolves weird line at the top.
+				# IMPORTANT: need to add a pixel skipping method
+				# 	basically it would just jump ahead {WIDTH} num pixels to get to the next row
+				# OR 
+				# split the pixels into rows by {WIDTH} then run processing on each individual row, then recombine
+				# use pythons split stuff it [:, :, :] using width somewherein there
+
+			else:
+				print('missed the mesh')	
+
+			'''
+
+
+		elif event.type in {'RIGHTMOUSE', 'ESC'}:
+			# Remove screen draw
+			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')	
+			self.mouse_down = False
+			
+			return {'FINISHED'}
+
+		return {'RUNNING_MODAL'}
+		
+	def invoke(self, context, event):	
+		self.mouse_positions = []		
+		self._mouseover_positions = []
+		self.marquee_start = (0, 0)
+		self.marquee_end = (0, 0)
+		args = (self, context)
+		self._handle = bpy.types.SpaceView3D.draw_handler_add(MATTEPAINTER_FN_drawMarqueeCallback, args, 'WINDOW', 'POST_PIXEL')
+
+		self.active_object = bpy.context.active_object
+		self.region = bpy.context.region 
+		self.region3d = bpy.context.space_data.region_3d 
+		self.object_size = self.active_object.dimensions	
+
+		# Grab Vertices			
+		self.vertices = self.active_object.data.vertices
+		self.top_left = self.vertices[2].co
+		self.top_left_2d = view3d_utils.location_3d_to_region_2d(self.region, self.region3d, self.top_left)
+		self.bottom_right = self.vertices[1].co
+		self.bottom_right_2d = view3d_utils.location_3d_to_region_2d(self.region, self.region3d, self.bottom_right)
+
+		# Use Vertices to Calculate Screen-Based Area of Object
+		self.width_2d = self.bottom_right_2d[0] - self.top_left_2d[0]
+		self.height_2d = self.top_left_2d[1] - self.bottom_right_2d[1]
+		self.scale_2d = (self.width_2d, self.height_2d)
+
+		context.window_manager.modal_handler_add(self)
+		return {'RUNNING_MODAL'}
+
+
+class MATTEPAINTER_OT_selectionLasso(bpy.types.Operator):
+
+	# Not Implemented
+	bl_idname = "mattepainter.select_lasso"
+	bl_label = "Lasso Fill"
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Selects pixels using a Lasso-style selection"
+
+	def _draw_lasso(self):
+		bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
+		bpy.data.brushes["TexDraw"].stroke_method = 'CURVE'
+
+		previous_stroke_method = bpy.context.tool_settings.image_paint.brush.stroke_method
+		previous_falloff = bpy.context.tool_settings.image_paint.brush.curve_preset
+
+		bpy.ops.paintcurve.new()		
+		bpy.data.paint_curves[-1].name = "MATTEPAINTER_LassoCurve"
+
+		for point in self.lasso_points:
+			bpy.ops.paintcurve.add_point(location=(int(point[0]), int(point[1]))) # fix the list later (remove the Vector crap)
+
+		# Close & Paint Curve
+		bpy.ops.paintcurve.add_point(location=(int(self.lasso_points[0][0]), int(self.lasso_points[0][1])))
+		bpy.ops.paintcurve.draw()
+
+		# Return settings to previous state and delete curve		
+		bpy.context.tool_settings.image_paint.brush.paint_curve = None
+		bpy.context.tool_settings.image_paint.brush.stroke_method = previous_stroke_method
+		bpy.context.tool_settings.image_paint.brush.curve_preset = previous_falloff	
+
+	strokes = []
+	lasso_points = []
+	pixels = []
+	mouse_down = False
+
+	# while mouse is down, append each mouse position 
+	# at mouseup, store final mouse position
+	# increment towards mouse position[0] by 1px ie:
+	 	# calculate which offset (distance between the start and end) is larger
+	 	# for i range Math.abs((that offset ^^))
+			# increment.x = final.x +1 if final.x < initial.x else final.x-1
+			# increment.y = final.y +1 if final.y < initial.y else final.y-1
+			# positions.append((increment.x, increment.y))
+		# something like that
+
+	# once lasso is closed, calculate a bounding box around the selection using min/max
+
+	# for each pixel in the bounding box, check if that pixel is inside the lasso 
+		# for y in range len(height_of_box)
+			# for x in range (width of box)
+				# if pixel[x] is in bounding box					
+					# might need to raycast horizontally and make sure it passes the lasso ODD times 
+					# append pixel
+		# paint pixels
+
+
+	@classmethod
+	def poll(cls, context):
+		return context.mode in ['PAINT_TEXTURE']
+
+	def modal(self, context:bpy.types.Context, event:bpy.types.Event):
+		context.area.tag_redraw()
+		if event.type == 'LEFTMOUSE':
+			if not self.mouse_down:
+				self.mouse_down = True
+			else:
+				self.mouse_down = False
+
+				# Determine the bounding rectangle of the lassoed area
+				min_x = int(min(self.lasso_points, key=lambda p: p[0])[0])
+				max_x = int(max(self.lasso_points, key=lambda p: p[0])[0])
+				min_y = int(min(self.lasso_points, key=lambda p: p[1])[1])
+				max_y = int(max(self.lasso_points, key=lambda p: p[1])[1])
+
+				for x in range(min_x, max_x + 1):
+					for y in range(min_y, max_y + 1):
+						self.pixels.append((x, y))
+
+				print(f'Num Points: {len(self.lasso_points)}')
+				print(f'Num Pixels in Lasso: {len(self.pixels)}')
+				print(f'Min X: {min_x}, Max X: {max_x}')
+				print(f'Min Y: {min_y}, Max Y: {max_y}')
+
+				self._draw_lasso()
+
+				# Clear array
+				self.lasso_points.clear()
+				self.pixels.clear()		
+
+				# Remove screen draw
+				bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')	
+
+				return{'FINISHED'}
+
+		elif event.type == 'MOUSEMOVE' and self.mouse_down:
+			mouse_pos = Vector(((event.mouse_x) - context.area.regions.data.x, event.mouse_y - context.area.regions.data.y))
+			self.lasso_points.append(mouse_pos)
+			
+			# Append mouse positions for screen-draw
+			self.mouse_path.append((event.mouse_region_x, event.mouse_region_y))             
+
+		elif event.type in {'RIGHTMOUSE', 'ESC'}:
+			# Remove screen draw
+			bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+			return {'FINISHED'}
+
+		return {'RUNNING_MODAL'}
+
+	def invoke(self, context, event):
+		self.mouse_path = []
+		args = (self, context)
+		self._handle = bpy.types.SpaceView3D.draw_handler_add(MATTEPAINTER_FN_drawLassoCallback, args, 'WINDOW', 'POST_PIXEL')
+
+		context.window_manager.modal_handler_add(self)
+		return {'RUNNING_MODAL'}	
+
 class MATTEPAINTER_OT_fillAll(bpy.types.Operator):
 	# Implementation of Krita's fill all pixels function
 	# Shortcut is Shift+Backspace in Texture Paint Mode
+
+	# NOTES
+	# because Paint Bucket and Brush Tool have different Colour Palletes, need to pull colour from Brush Tool
+	# also need to revert back to Brush Tool when done
+
+	# Not Implemented
 	bl_idname = "mattepainter.fill_all"
 	bl_label = "Fill All"
 	bl_options = {"REGISTER", "UNDO"}
@@ -663,17 +1196,11 @@ class MATTEPAINTER_OT_fillAll(bpy.types.Operator):
 		return context.mode in ['PAINT_TEXTURE']
 
 	def execute(self, context):	
-		# Setup Paint Tools
 		active_object = bpy.context.active_object
-		fill_color = bpy.context.tool_settings.image_paint.brush.color
-
-		# Switch to Paint Bucket
 		bpy.ops.wm.tool_set_by_id(name="builtin_brush.Fill")
-		bpy.context.tool_settings.image_paint.brush.color = fill_color
-
-		# Override
 		area = MATTEPAINTER_FN_contextOverride("VIEW_3D")
-		bpy.context.temp_override(area=area)			
+		bpy.context.temp_override(area=area)	
+
 		region = bpy.context.region 
 		region3d = bpy.context.space_data.region_3d 
 		object_location = view3d_utils.location_3d_to_region_2d(region, region3d, active_object.location)
@@ -691,7 +1218,6 @@ class MATTEPAINTER_OT_fillAll(bpy.types.Operator):
 				    "y_tilt":0.0}]
 
 		bpy.ops.paint.image_paint(stroke=stroke)
-		bpy.ops.wm.tool_set_by_id(name='builtin_brush.Draw')
 		return {'FINISHED'}	
 
 #--------------------------------------------------------------
@@ -738,7 +1264,9 @@ class MATTEPAINTER_PT_panelLayers(bpy.types.Panel):
 		# Paint & Selection Tools
 		row = layout.row()
 		row.operator(MATTEPAINTER_OT_toolBrush.bl_idname, text="", icon="BRUSHES_ALL", emboss=True, depress=True if bpy.data.brushes["TexDraw"].stroke_method == 'SPACE' else False)
-		row.operator(MATTEPAINTER_OT_toolLine.bl_idname, text="", icon="IPO_LINEAR", emboss=True, depress=True if bpy.data.brushes["TexDraw"].stroke_method == 'LINE' else False)		
+		row.operator(MATTEPAINTER_OT_toolLine.bl_idname, text="", icon="IPO_LINEAR", emboss=True, depress=True if bpy.data.brushes["TexDraw"].stroke_method == 'LINE' else False)
+		row.operator(MATTEPAINTER_OT_selectionMarquee.bl_idname, text="", icon="SELECT_SET")
+		row.operator(MATTEPAINTER_OT_selectionLasso.bl_idname, text="", icon="MOD_DASH")
 		row.operator(MATTEPAINTER_OT_fillAll.bl_idname, text="", icon="SNAP_FACE", emboss=True)
 
 		if bpy.data.collections.find(r"MattePainter") != -1 and len(bpy.data.collections[r"MattePainter"].objects) > 0:
@@ -860,6 +1388,8 @@ def register():
 
 	bpy.utils.register_class(MATTEPAINTER_OT_toolBrush)
 	bpy.utils.register_class(MATTEPAINTER_OT_toolLine)
+	bpy.utils.register_class(MATTEPAINTER_OT_selectionMarquee)
+	bpy.utils.register_class(MATTEPAINTER_OT_selectionLasso)	
 	bpy.utils.register_class(MATTEPAINTER_OT_fillAll)
 
 	# Variables
@@ -927,6 +1457,8 @@ def unregister():
 
 	bpy.utils.unregister_class(MATTEPAINTER_OT_toolBrush)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_toolLine)
+	bpy.utils.unregister_class(MATTEPAINTER_OT_selectionMarquee)
+	bpy.utils.unregister_class(MATTEPAINTER_OT_selectionLasso)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_fillAll)	
 	
 
