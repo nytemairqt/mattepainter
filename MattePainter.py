@@ -442,10 +442,7 @@ class MATTEPAINTER_OT_layerVisibilityActive(bpy.types.Operator):
 
 		active_object.hide_viewport = 1-active_object.hide_render
 		active_object.hide_render = 1-active_object.hide_render
-		return {'FINISHED'}	
-
-
-		
+		return {'FINISHED'}			
 
 class MATTEPAINTER_OT_layerLock(bpy.types.Operator):
 	# Toggles selection for the Layer.
@@ -749,6 +746,40 @@ class MATTEPAINTER_OT_fillAll(bpy.types.Operator):
 		return {'FINISHED'}	
 
 #--------------------------------------------------------------
+# Color Grading
+#--------------------------------------------------------------		
+
+class MATTEPAINTER_OT_toggleCurves(bpy.types.Operator):
+	bl_idname = "mattepainter.toggle_curves"
+	bl_label = "Enable/Disable Curves"
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Toggles the Curves Node"	
+
+	def execute(self, context):
+		active_object = bpy.context.active_object
+	
+		material = active_object.data.materials[0]
+		nodes = material.node_tree.nodes
+		node_curves = nodes.get('curves')
+		node_curves.mute = 1-node_curves.mute
+		return {'FINISHED'}	
+
+class MATTEPAINTER_OT_toggleHSV(bpy.types.Operator):
+	bl_idname = "mattepainter.toggle_hsv"
+	bl_label = "Enable/Disable HSV"
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Toggles the Hue/Saturation/Value Node"	
+
+	def execute(self, context):
+		active_object = bpy.context.active_object
+	
+		material = active_object.data.materials[0]
+		nodes = material.node_tree.nodes
+		node_HSV = nodes.get('HSV')
+		node_HSV.mute = 1-node_HSV.mute
+		return {'FINISHED'}	
+
+#--------------------------------------------------------------
 # Interface
 #--------------------------------------------------------------
 
@@ -855,7 +886,6 @@ class MATTEPAINTER_PT_panelFileManagement(bpy.types.Panel):
 		row.prop(bpy.context.scene.view_settings,'view_transform',icon_value=54, text=r"Color", emboss=True, expand=False,)
 		row.prop(bpy.context.scene.cycles,'transparent_max_bounces', text=r"Cycles Layers:", emboss=True, slider=False,)
 		
-
 class MATTEPAINTER_PT_panelColorGrade(bpy.types.Panel):
 	bl_label = "Color Grade"
 	bl_idname = "MATTEPAINTER_PT_panelColorGrade"
@@ -868,19 +898,22 @@ class MATTEPAINTER_PT_panelColorGrade(bpy.types.Panel):
 		if not bpy.context.active_object == None and not bpy.context.active_object.type == 'MESH':
 			return
 		layout = self.layout
-		if (not bpy.context.active_object == None and bpy.context.active_object.users_collection[0] == bpy.data.collections['MattePainter']):
-			box = layout.box()
+		layer_nodes = bpy.context.active_object.data.materials[0].node_tree.nodes
+		if (not bpy.context.active_object == None and bpy.context.active_object.users_collection[0] == bpy.data.collections['MattePainter']):			
+			box = layout.box()			
 			box.enabled = True
 			box.alert = False
 			box.scale_x = 1.0
-			box.scale_y = 1.0			
-			box.prop(bpy.context.active_object.data.materials[0].node_tree.nodes[r"opacity"].inputs[0], 'default_value', text=r"Opacity", emboss=True, slider=True)
-			box.prop(bpy.context.active_object.data.materials[0].node_tree.nodes[r"blur_mix"].inputs[0], 'default_value', text=r"Blur", emboss=True, slider=True)
+			box.scale_y = 1.0					
+			box.prop(layer_nodes[r"opacity"].inputs[0], 'default_value', text=r"Opacity", emboss=True, slider=True)
+			box.prop(layer_nodes[r"blur_mix"].inputs[0], 'default_value', text=r"Blur", emboss=True, slider=True)			
+			opToggleCurves = box.operator(MATTEPAINTER_OT_toggleCurves.bl_idname, text="Enable Curves",  emboss=False if layer_nodes.get('curves').mute else True, depress=True, icon='NORMALIZE_FCURVES')
 			sn_layout = box
 			sn_layout.template_curve_mapping(bpy.context.active_object.data.materials[0].node_tree.nodes[r"curves"], 'mapping', type='COLOR')
-			box.prop(bpy.context.active_object.data.materials[0].node_tree.nodes[r"HSV"].inputs[0], 'default_value', text=r"Hue", emboss=True, slider=True)
-			box.prop(bpy.context.active_object.data.materials[0].node_tree.nodes[r"HSV"].inputs[1], 'default_value', text=r"Saturation", emboss=True, slider=True)
-			box.prop(bpy.context.active_object.data.materials[0].node_tree.nodes[r"HSV"].inputs[2], 'default_value', text=r"Value", emboss=True, slider=True)
+			opToggleCurves = box.operator(MATTEPAINTER_OT_toggleHSV.bl_idname, text="Enable HSV",  emboss=False if layer_nodes.get('HSV').mute else True, depress=True, icon='COLOR')
+			box.prop(layer_nodes[r"HSV"].inputs[0], 'default_value', text=r"Hue", emboss=True, slider=True)
+			box.prop(layer_nodes[r"HSV"].inputs[1], 'default_value', text=r"Saturation", emboss=True, slider=True)
+			box.prop(layer_nodes[r"HSV"].inputs[2], 'default_value', text=r"Value", emboss=True, slider=True)
 
 
 addon_keymaps = []
@@ -914,6 +947,9 @@ def register():
 	bpy.utils.register_class(MATTEPAINTER_OT_layerShowMask)
 	bpy.utils.register_class(MATTEPAINTER_OT_layerBlendOriginalAlpha)	
 	bpy.utils.register_class(MATTEPAINTER_OT_moveToCamera)
+
+	bpy.utils.register_class(MATTEPAINTER_OT_toggleCurves)
+	bpy.utils.register_class(MATTEPAINTER_OT_toggleHSV)
 
 	bpy.utils.register_class(MATTEPAINTER_OT_toolBrush)
 	bpy.utils.register_class(MATTEPAINTER_OT_toolLine)
@@ -987,6 +1023,9 @@ def unregister():
 	bpy.utils.unregister_class(MATTEPAINTER_OT_layerShowMask)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_layerBlendOriginalAlpha)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_moveToCamera)
+
+	bpy.utils.unregister_class(MATTEPAINTER_OT_toggleCurves)
+	bpy.utils.unregister_class(MATTEPAINTER_OT_toggleHSV)
 
 	bpy.utils.unregister_class(MATTEPAINTER_OT_toolBrush)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_toolLine)
