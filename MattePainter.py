@@ -378,7 +378,7 @@ class MATTEPAINTER_OT_paintMask(bpy.types.Operator):
 			return {'CANCELLED'}
 		bpy.ops.object.transform_apply(scale=True)
 		bpy.ops.object.mode_set(mode='TEXTURE_PAINT')
-		#bpy.context.scene.tool_settings.image_paint.use_backface_culling = False
+		bpy.context.scene.tool_settings.image_paint.use_backface_culling = False
 		return {'FINISHED'}
 
 class MATTEPAINTER_OT_layerSelect(bpy.types.Operator):
