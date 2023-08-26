@@ -234,7 +234,7 @@ class MATTEPAINTER_OT_newLayerFromFile(bpy.types.Operator, ImportHelper):
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
 		active_object.data.materials.append(material)
-		material.blend_method = "BLEND"
+		material.blend_method = "HASHED"
 		material.shadow_method = "CLIP"
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
@@ -286,7 +286,7 @@ class MATTEPAINTER_OT_newEmptyPaintLayer(bpy.types.Operator):
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
 		active_object.data.materials.append(material)
-		material.blend_method = "BLEND"
+		material.blend_method = "HASHED"
 		material.shadow_method = "CLIP"
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
@@ -348,7 +348,7 @@ class MATTEPAINTER_OT_newLayerFromClipboard(bpy.types.Operator):
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
 		active_object.data.materials.append(material)
-		material.blend_method = "BLEND"
+		material.blend_method = "HASHED"
 		material.shadow_method = "CLIP"
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
@@ -378,7 +378,7 @@ class MATTEPAINTER_OT_paintMask(bpy.types.Operator):
 			return {'CANCELLED'}
 		bpy.ops.object.transform_apply(scale=True)
 		bpy.ops.object.mode_set(mode='TEXTURE_PAINT')
-		bpy.context.scene.tool_settings.image_paint.use_backface_culling = False
+		#bpy.context.scene.tool_settings.image_paint.use_backface_culling = False
 		return {'FINISHED'}
 
 class MATTEPAINTER_OT_layerSelect(bpy.types.Operator):
@@ -421,6 +421,20 @@ class MATTEPAINTER_OT_layerVisibility(bpy.types.Operator):
 		objects[self.MATTEPAINTER_VAR_layerIndex].hide_viewport = 1-objects[self.MATTEPAINTER_VAR_layerIndex].hide_render
 		objects[self.MATTEPAINTER_VAR_layerIndex].hide_render = 1-objects[self.MATTEPAINTER_VAR_layerIndex].hide_render
 		return {'FINISHED'}
+
+class MATTEPAINTER_OT_layerVisibilityActive(bpy.types.Operator):
+	# Toggles visibility for the Layer.
+	bl_idname = "mattepainter.layer_visibility_active"
+	bl_label = "Toggle Layer Visibility (Active)."
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Hides/Shows the Active Layer from both Viewport & Renders"
+
+	def execute(self, context):
+		active_object = bpy.context.active_object
+
+		active_object.hide_viewport = 1-active_object.hide_render
+		active_object.hide_render = 1-active_object.hide_render
+		return {'FINISHED'}			
 
 class MATTEPAINTER_OT_layerLock(bpy.types.Operator):
 	# Toggles selection for the Layer.
@@ -501,7 +515,7 @@ class MATTEPAINTER_OT_layerShowMask(bpy.types.Operator):
 			link = links.new(albedo.outputs[0], curves.inputs[1])
 			link = links.new(opacity.outputs[0], mix.inputs[0])
 		
-		return {'FINISHED'}			
+		return {'FINISHED'}					
 
 class MATTEPAINTER_OT_makeUnique(bpy.types.Operator):
 	# Makes a duplicated Object unique.
@@ -613,14 +627,14 @@ class MATTEPAINTER_OT_clearUnused(bpy.types.Operator):
 
 	def execute(self, context):
 		bpy.ops.outliner.orphans_purge('INVOKE_DEFAULT' if True else 'EXEC_DEFAULT', num_deleted=0, do_local_ids=True, do_linked_ids=False, do_recursive=True)
-		#self.report({"INFO"}, "Purged unused data.")
 		return {'FINISHED'}
 
 #--------------------------------------------------------------
-# ____NOT_IMPLEMENTED
+# Paint Tools
 #--------------------------------------------------------------
 
 class MATTEPAINTER_OT_toolBrush(bpy.types.Operator):
+	# Switches primary painting tool to Brush (Space)
 	bl_idname = "mattepainter.tool_brush"
 	bl_label = "Brush Tool"
 	bl_options = {"REGISTER", "UNDO"}
@@ -636,6 +650,7 @@ class MATTEPAINTER_OT_toolBrush(bpy.types.Operator):
 		return {'FINISHED'}		
 
 class MATTEPAINTER_OT_toolLine(bpy.types.Operator):
+	# Switches primary painting tool to Line.
 	bl_idname = "mattepainter.tool_line"
 	bl_label = "Line Tool"
 	bl_options = {"REGISTER", "UNDO"}
@@ -852,6 +867,7 @@ def register():
 	bpy.utils.register_class(MATTEPAINTER_OT_clearUnused)
 	bpy.utils.register_class(MATTEPAINTER_OT_layerSelect)
 	bpy.utils.register_class(MATTEPAINTER_OT_layerVisibility)
+	bpy.utils.register_class(MATTEPAINTER_OT_layerVisibilityActive)	
 	bpy.utils.register_class(MATTEPAINTER_OT_layerLock)
 	bpy.utils.register_class(MATTEPAINTER_OT_layerInvertMask)
 	bpy.utils.register_class(MATTEPAINTER_OT_layerInvertMaskActive)	
@@ -894,6 +910,10 @@ def register():
 		kmi = km.keymap_items.new(MATTEPAINTER_OT_layerInvertMaskActive.bl_idname, type='I', value='PRESS', shift=True, ctrl=True)
 		addon_keymaps.append((km, kmi))
 
+		# Hide Active Layer
+		kmi = km.keymap_items.new(MATTEPAINTER_OT_layerVisibilityActive.bl_idname, type='H', value='PRESS')
+		addon_keymaps.append((km, kmi))
+
 		# Switch to Paint Mode
 		kmi = km.keymap_items.new(MATTEPAINTER_OT_paintMask.bl_idname, type='LEFTMOUSE', value='PRESS', shift=True, ctrl=True)
 		addon_keymaps.append((km, kmi))
@@ -919,6 +939,7 @@ def unregister():
 	bpy.utils.unregister_class(MATTEPAINTER_OT_clearUnused)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_layerSelect)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_layerVisibility)
+	bpy.utils.unregister_class(MATTEPAINTER_OT_layerVisibilityActive)	
 	bpy.utils.unregister_class(MATTEPAINTER_OT_layerLock)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_layerInvertMask)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_layerInvertMaskActive)	
