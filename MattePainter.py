@@ -104,6 +104,7 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	node_overlayRGB = nodes.new(type="ShaderNodeMixRGB")
 	node_coord = nodes.new(type="ShaderNodeTexCoord")
 	node_albedo = nodes.new(type="ShaderNodeTexImage")
+	node_combine_original_alpha = nodes.new(type="ShaderNodeMixRGB")
 		
 	# Naming Nodes for Color Grading
 	node_overlayRGB.name = 'blur_mix'
@@ -113,9 +114,10 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	node_albedo.name = 'albedo'
 	node_mix.name = 'mix'
 	node_invert.name = 'invert'
+	node_combine_original_alpha.name = 'combineoriginalalpha'
 
 	# Default Values
-	node_invert.mute = True
+	node_invert.mute = True	
 	node_albedo.image = image_file
 
 	if image_file.source == "MOVIE":
@@ -133,8 +135,11 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 
 	node_noise.inputs[2].default_value = 1000000.0
 	node_opacity.inputs[0].default_value = 1.0
-	node_mixRGB.blend_type = "MIX"
+	node_mixRGB.blend_type = "MIX"	
 	node_mixRGB.inputs[0].default_value = 0.0
+	node_combine_original_alpha.blend_type = "MULTIPLY"
+	node_combine_original_alpha.mute = True
+	node_combine_original_alpha.inputs[0].default_value = 1.0
 	node_overlayRGB.blend_type = "OVERLAY"
 	node_overlayRGB.inputs[0].default_value = 0.0
 	node_opacity.inputs[0].default_value = 1.0
@@ -156,8 +161,10 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	link = links.new(node_overlayRGB.outputs[0], node_albedo.inputs[0]) # OverlayRGB -> Albedo
 
 	if not mask == None:
-		link = links.new(node_mask.outputs[0], node_invert.inputs[1]) # Mask -> Invert Input
+		#link = links.new(node_mask.outputs[0], node_invert.inputs[1]) # Mask -> Invert Input
 		link = links.new(node_overlayRGB.outputs[0], node_mask.inputs[0]) # OverlayRGB -> Mask
+		link = links.new(node_mask.outputs[0], node_combine_original_alpha.inputs[1]) # Mask -> Combine
+		link = links.new(node_combine_original_alpha.outputs[0], node_invert.inputs[1]) # Combine -> Invert		
 	else:
 		link = links.new(node_albedo.outputs[1], node_invert.inputs[1]) # Albedo Alpha -> Invert Input
 		link = links.new(node_overlayRGB.outputs[0], node_albedo.inputs[0]) # OverlayRGB -> Albedo
@@ -167,8 +174,9 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	node_mix.location = Vector((-100.0, 0.0))
 	node_emission.location = Vector((-300.0, -200.0))
 	node_transparent.location= Vector((-300.0, -50.0))
-	node_albedo.location = Vector((-1100.0, -300.0))	
-	node_invert.location = Vector((-800.0, 200.0))
+	node_albedo.location = Vector((-1200.0, -300.0))	
+	node_invert.location = Vector((-700.0, 200.0))
+	node_combine_original_alpha.location = Vector((-900, 200))
 	node_opacity.location = Vector((-500.0, 200.0))
 	node_HSV.location = Vector((-500.0, -300.0))
 	node_curves.location = Vector((-800.0, -300.0))
@@ -177,7 +185,7 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	node_noise.location = Vector((-1600.0, -200.0))
 	node_coord.location = Vector((-1800.0, 0.0))	
 	if not mask == None:
-		node_mask.location = Vector((-1100.0, 200.0))
+		node_mask.location = Vector((-1200.0, 200.0))
 
 def MATTEPAINTER_FN_contextOverride(area_to_check):
 	return [area for area in bpy.context.screen.areas if area.type == area_to_check][0]
@@ -434,7 +442,10 @@ class MATTEPAINTER_OT_layerVisibilityActive(bpy.types.Operator):
 
 		active_object.hide_viewport = 1-active_object.hide_render
 		active_object.hide_render = 1-active_object.hide_render
-		return {'FINISHED'}			
+		return {'FINISHED'}	
+
+
+		
 
 class MATTEPAINTER_OT_layerLock(bpy.types.Operator):
 	# Toggles selection for the Layer.
@@ -502,19 +513,47 @@ class MATTEPAINTER_OT_layerShowMask(bpy.types.Operator):
 		opacity = nodes.get("opacity")
 		mix = nodes.get("mix")
 		invert = nodes.get("invert")
-		
-		if mask.outputs[0].links[0].to_node.name == "invert":
-			links.remove(mask.outputs[0].links[0])
+		combine_original_alpha = nodes.get("combineoriginalalpha")
+
+		if combine_original_alpha.outputs[0].links[0].to_node.name == "invert":
+			links.remove(combine_original_alpha.outputs[0].links[0])
 			links.remove(albedo.outputs[0].links[0])
 			links.remove(opacity.outputs[0].links[0])
 			mix.inputs[0].default_value = 1.0
-			link = links.new(mask.outputs[0], curves.inputs[1])
+			link = links.new(combine_original_alpha.outputs[0], curves.inputs[1])
 		else:
-			links.remove(mask.outputs[0].links[0])
-			link = links.new(mask.outputs[0], invert.inputs[1])
+			links.remove(combine_original_alpha.outputs[0].links[0])
+			link = links.new(combine_original_alpha.outputs[0], invert.inputs[1])
 			link = links.new(albedo.outputs[0], curves.inputs[1])
 			link = links.new(opacity.outputs[0], mix.inputs[0])
 		
+		return {'FINISHED'}		
+
+class MATTEPAINTER_OT_layerBlendOriginalAlpha(bpy.types.Operator):
+	# Combines the Painted Mask with the Image's original Alpha Channel
+	bl_idname = "mattepainter.layer_blend_original_alpha"
+	bl_label = "Blend Original Alpha Channel"
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Combines the painted mask with the Image's Original Alpha"
+	MATTEPAINTER_VAR_layerIndex: bpy.props.IntProperty(name='MATTEPAINTER_VAR_layerIndex', description='',subtype='NONE', options={'HIDDEN'}, default=0)
+
+	def execute(self, context):
+		objects = bpy.data.collections[r"MattePainter"].objects 
+
+		material = objects[self.MATTEPAINTER_VAR_layerIndex].data.materials[0]
+		nodes = material.node_tree.nodes
+		links = material.node_tree.links
+
+		mask = nodes.get("transparency_mask")
+		albedo = nodes.get("albedo")		
+		combine_original_alpha = nodes.get("combineoriginalalpha")
+
+		if combine_original_alpha.mute:
+			link = links.new(albedo.outputs[1], combine_original_alpha.inputs[2])
+		else:
+			links.remove(albedo.outputs[1].links[0])
+
+		combine_original_alpha.mute = 1-combine_original_alpha.mute
 		return {'FINISHED'}					
 
 class MATTEPAINTER_OT_makeUnique(bpy.types.Operator):
@@ -780,6 +819,7 @@ class MATTEPAINTER_PT_panelLayers(bpy.types.Panel):
 				opInvertMask = row.operator(MATTEPAINTER_OT_layerInvertMask.bl_idname, text="", emboss=False, depress=True, icon='CLIPUV_HLT' if layer_nodes.get('invert').mute else 'CLIPUV_DEHLT')	
 				if not layer_nodes.get('transparency_mask') == None:
 					opShowMask = row.operator(MATTEPAINTER_OT_layerShowMask.bl_idname, text="", emboss=False, depress=True, icon='IMAGE_ALPHA' if layer_nodes.get('transparency_mask').outputs[0].links[0].to_node.name == 'invert' else 'IMAGE_RGB')	
+					opBlendOriginal = row.operator(MATTEPAINTER_OT_layerBlendOriginalAlpha.bl_idname, text="", emboss= False if layer_nodes.get('combineoriginalalpha').mute else True, depress=False , icon='OVERLAY')
 
 				opSelect.MATTEPAINTER_VAR_layerIndex = i
 				opVisible.MATTEPAINTER_VAR_layerIndex = i
@@ -865,13 +905,14 @@ def register():
 	bpy.utils.register_class(MATTEPAINTER_OT_makeSequence)
 	bpy.utils.register_class(MATTEPAINTER_OT_saveAllImages)
 	bpy.utils.register_class(MATTEPAINTER_OT_clearUnused)
-	bpy.utils.register_class(MATTEPAINTER_OT_layerSelect)
+	bpy.utils.register_class(MATTEPAINTER_OT_layerSelect)	
 	bpy.utils.register_class(MATTEPAINTER_OT_layerVisibility)
 	bpy.utils.register_class(MATTEPAINTER_OT_layerVisibilityActive)	
 	bpy.utils.register_class(MATTEPAINTER_OT_layerLock)
 	bpy.utils.register_class(MATTEPAINTER_OT_layerInvertMask)
 	bpy.utils.register_class(MATTEPAINTER_OT_layerInvertMaskActive)	
 	bpy.utils.register_class(MATTEPAINTER_OT_layerShowMask)
+	bpy.utils.register_class(MATTEPAINTER_OT_layerBlendOriginalAlpha)	
 	bpy.utils.register_class(MATTEPAINTER_OT_moveToCamera)
 
 	bpy.utils.register_class(MATTEPAINTER_OT_toolBrush)
@@ -944,6 +985,7 @@ def unregister():
 	bpy.utils.unregister_class(MATTEPAINTER_OT_layerInvertMask)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_layerInvertMaskActive)	
 	bpy.utils.unregister_class(MATTEPAINTER_OT_layerShowMask)
+	bpy.utils.unregister_class(MATTEPAINTER_OT_layerBlendOriginalAlpha)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_moveToCamera)
 
 	bpy.utils.unregister_class(MATTEPAINTER_OT_toolBrush)
