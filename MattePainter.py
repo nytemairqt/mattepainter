@@ -306,7 +306,7 @@ class MATTEPAINTER_OT_newEmptyPaintLayer(bpy.types.Operator):
 
 class MATTEPAINTER_OT_newLayerFromClipboard(bpy.types.Operator):
 	bl_idname = "mattepainter.new_layer_from_clipboard"
-	bl_label = "Imports an image directly from the Clipboard."
+	bl_label = "Paste Clipboard"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Imports an image directly from the Clipboard"
 
@@ -373,7 +373,7 @@ class MATTEPAINTER_OT_newLayerFromClipboard(bpy.types.Operator):
 class MATTEPAINTER_OT_paintMask(bpy.types.Operator):
 	# Switches to Texture Paint Mode.
 	bl_idname = "mattepainter.paint_mask"
-	bl_label = "Switch to Mask Paint mode."
+	bl_label = "Paint Mode"
 	bl_description = "Switch to Mask Paint mode"
 	bl_options = {"REGISTER", "UNDO"}
 
@@ -392,7 +392,7 @@ class MATTEPAINTER_OT_paintMask(bpy.types.Operator):
 class MATTEPAINTER_OT_layerSelect(bpy.types.Operator):
 	# Selects the indexed Object via the Layers panel.
 	bl_idname = "mattepainter.layer_select"
-	bl_label = "Select layer."
+	bl_label = "Select Layer."
 	bl_description = "Selects the Layer"
 	bl_options = {"REGISTER", "UNDO"}
 	MATTEPAINTER_VAR_layerIndex: bpy.props.IntProperty(name='MATTEPAINTER_VAR_layerIndex', description='',subtype='NONE', options={'HIDDEN'}, default=0)
@@ -418,7 +418,7 @@ class MATTEPAINTER_OT_layerSelect(bpy.types.Operator):
 class MATTEPAINTER_OT_layerVisibility(bpy.types.Operator):
 	# Toggles visibility for the Layer.
 	bl_idname = "mattepainter.layer_visibility"
-	bl_label = "Toggle Layer Visibility."
+	bl_label = "Hide/Show Layer"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Hides/Shows the Layer from both Viewport & Renders"
 	MATTEPAINTER_VAR_layerIndex: bpy.props.IntProperty(name='MATTEPAINTER_VAR_layerIndex', description='',subtype='NONE', options={'HIDDEN'}, default=0)
@@ -433,7 +433,7 @@ class MATTEPAINTER_OT_layerVisibility(bpy.types.Operator):
 class MATTEPAINTER_OT_layerVisibilityActive(bpy.types.Operator):
 	# Toggles visibility for the Layer.
 	bl_idname = "mattepainter.layer_visibility_active"
-	bl_label = "Toggle Layer Visibility (Active)."
+	bl_label = "Hide/Show Layer"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Hides/Shows the Active Layer from both Viewport & Renders"
 
@@ -447,7 +447,7 @@ class MATTEPAINTER_OT_layerVisibilityActive(bpy.types.Operator):
 class MATTEPAINTER_OT_layerLock(bpy.types.Operator):
 	# Toggles selection for the Layer.
 	bl_idname = "mattepainter.layer_lock"
-	bl_label = "Toggle Layer Selection."
+	bl_label = "Lock Layer"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Locks the Layer"
 	MATTEPAINTER_VAR_layerIndex: bpy.props.IntProperty(name='MATTEPAINTER_VAR_layerIndex', description='',subtype='NONE', options={'HIDDEN'}, default=0)
@@ -459,7 +459,7 @@ class MATTEPAINTER_OT_layerLock(bpy.types.Operator):
 
 class MATTEPAINTER_OT_layerInvertMask(bpy.types.Operator):
 	bl_idname = "mattepainter.invert_mask"
-	bl_label = "Toggle Mask Inversion"
+	bl_label = "Invert Mask"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Toggles mask inversion for the Layer"
 	MATTEPAINTER_VAR_layerIndex: bpy.props.IntProperty(name='MATTEPAINTER_VAR_layerIndex', description='',subtype='NONE', options={'HIDDEN'}, default=0)
@@ -492,7 +492,7 @@ class MATTEPAINTER_OT_layerInvertMaskActive(bpy.types.Operator):
 
 class MATTEPAINTER_OT_layerShowMask(bpy.types.Operator):
 	bl_idname = "mattepainter.show_mask"
-	bl_label = "Displays Transparency Mask"
+	bl_label = "Show Mask"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Toggles displaying the Transparency Mask for the Layer"
 	MATTEPAINTER_VAR_layerIndex: bpy.props.IntProperty(name='MATTEPAINTER_VAR_layerIndex', description='',subtype='NONE', options={'HIDDEN'}, default=0)
@@ -556,7 +556,7 @@ class MATTEPAINTER_OT_layerBlendOriginalAlpha(bpy.types.Operator):
 class MATTEPAINTER_OT_makeUnique(bpy.types.Operator):
 	# Makes a duplicated Object unique.
 	bl_idname = "mattepainter.make_unique"
-	bl_label = "Creates a unique Shader Tree for a duplicated Object."
+	bl_label = "Make Unique"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Creates a unique Shader Tree for a duplicated Object"
 
@@ -578,7 +578,109 @@ class MATTEPAINTER_OT_makeUnique(bpy.types.Operator):
 			new_mask.pixels = pixels
 			node_mask.image = new_mask
 
-		return {'FINISHED'}		
+		return {'FINISHED'}	
+
+#--------------------------------------------------------------
+# Camera Projection Tools
+#--------------------------------------------------------------		
+class MATTEPAINTER_OT_setBackgroundImage(bpy.types.Operator, ImportHelper):
+	# Opens a File Browser to select an Image that will be assigned as the Active Camera's Background Image for Projection.
+	bl_idname = "mattepainter.set_background_image"
+	bl_label = "Select Projection Image"
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Select an Image File for Camera Projection"
+
+	filter_glob: bpy.props.StringProperty(
+			default='*.jpg;*.jpeg;*.png;*.tif;*.tiff;*.bmp;',
+			options={'HIDDEN'}
+		)
+
+	def execute(self, context):
+		# Camera Safety Check
+		camera = bpy.context.scene.camera
+		if not camera: # Safety Check
+			self.report({"WARNING"}, "No active scene camera.")
+			return{'CANCELLED'}	
+
+		# Image Loading
+		image = load_image(self.filepath, check_existing=True)
+
+		camera.data.show_background_images = True 
+		camera.data.background_images.clear()
+		bg_image = camera.data.background_images.new()
+		bg_image.image = image
+		#bpy.data.cameras["Camera"].background_images[0].frame_method
+		camera.data.background_images[0].frame_method = 'FIT'
+
+		# End Method
+		return {'FINISHED'}	
+
+class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
+	# Projects an edited Render from the active camera back onto the Object.
+	bl_idname = "mattepainter.project_image"
+	bl_label = "Project Image"
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Projects an edited Render from the active camera back onto the Object"
+
+	@classmethod
+	def poll(cls, context):
+		return context.mode in ['PAINT_TEXTURE', 'OBJECT', 'EDIT_MESH']
+	
+	def execute(self, context):
+		active_object = bpy.context.active_object
+		if bpy.context.scene.camera is None:
+			self.report({"WARNING"}, "No active scene camera.")
+			return{'CANCELLED'}		
+		
+		# Safety Checks
+		camera = bpy.context.scene.camera
+		if camera.data.show_background_images == False or len(camera.data.background_images) == 0 or camera.data.background_images[0].image is None:
+			self.report({"WARNING"}, "No background image assigned to camera.")
+			return{'CANCELLED'}
+
+		background_image = camera.data.background_images[0]	
+		width = background_image.image.size[0]	
+		height = background_image.image.size[1]
+		previous_mode = context.mode
+
+		# Create Material & Unwrap
+
+		active_object.data.materials.clear()
+		name = f'{background_image.image.name}_projection'
+		material = bpy.data.materials.new(name=name)
+		material.use_nodes = True
+		active_object.data.materials.append(material)
+		nodes = material.node_tree.nodes
+		links = material.node_tree.links
+
+		material_output = nodes.get("Material Output")
+		principled_bsdf = nodes.get("Principled BSDF")
+		nodes.remove(principled_bsdf)
+		node_albedo = nodes.new(type='ShaderNodeTexImage')
+
+		projection_image = bpy.data.images.new(name=name, width=width, height=height)
+		pixels = [1.0] * (4 * width * height)
+		projection_image.pixels = pixels
+
+		node_albedo.image = projection_image
+		link = links.new(node_albedo.outputs[0], material_output.inputs[0])
+
+		if not context.mode == 'EDIT':
+			bpy.ops.object.mode_set(mode='EDIT')
+		bpy.ops.mesh.select_all(action='SELECT')	
+		bpy.ops.uv.project_from_view(camera_bounds=True, correct_aspect=False, scale_to_bounds=False)
+
+		if not context.mode == 'PAINT_TEXTURE':
+			bpy.ops.object.mode_set(mode='TEXTURE_PAINT')
+
+		bpy.ops.wm.tool_set_by_id(name="builtin_brush.Fill")
+		bpy.ops.paint.project_image(image=background_image.image.name)
+
+		if previous_mode == 'EDIT':
+			bpy.ops.object.mode_set(mode='EDIT')
+		else:
+			bpy.ops.object.mode_set(mode='OBJECT')
+		return {'FINISHED'}	
 
 #--------------------------------------------------------------
 # File Management Functions
@@ -587,7 +689,7 @@ class MATTEPAINTER_OT_makeUnique(bpy.types.Operator):
 class MATTEPAINTER_OT_moveToCamera(bpy.types.Operator):
 	# Moves the plane in front of the camera and re-aligns it.
 	bl_idname = "mattepainter.move_to_camera"
-	bl_label = "Moves the plane in front of the camera and re-aligns it."
+	bl_label = "Move To Camera"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Moves the plane in front of the camera and re-aligns it"
 
@@ -610,7 +712,7 @@ class MATTEPAINTER_OT_moveToCamera(bpy.types.Operator):
 class MATTEPAINTER_OT_makeSequence(bpy.types.Operator):
 	# Converts an imported image into a Sequence.
 	bl_idname = "mattepainter.make_sequence"
-	bl_label = "Converts an imported image into a Sequence"
+	bl_label = "Make Sequence"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Converts an imported image into a Sequence"
 
@@ -641,7 +743,7 @@ class MATTEPAINTER_OT_makeSequence(bpy.types.Operator):
 class MATTEPAINTER_OT_saveAllImages(bpy.types.Operator):
 	# Saves all edited Image files.
 	bl_idname = "mattepainter.save_all_images"
-	bl_label = "Saves all modified Images."
+	bl_label = "Save All"
 	bl_description = "Saves all modified images"
 	bl_options = {"REGISTER"}
 
@@ -657,7 +759,7 @@ class MATTEPAINTER_OT_saveAllImages(bpy.types.Operator):
 class MATTEPAINTER_OT_clearUnused(bpy.types.Operator):
 	# Purges unused Data Blocks.
 	bl_idname = "mattepainter.clear_unused"
-	bl_label = "Purges unused Data Blocks."
+	bl_label = "Clear Unused"
 	bl_description = "Removes unlinked data from the Blend File. WARNING: This process cannot be undone"
 	bl_options = {"REGISTER"}
 
@@ -858,6 +960,22 @@ class MATTEPAINTER_PT_panelLayers(bpy.types.Panel):
 				opInvertMask.MATTEPAINTER_VAR_layerIndex = i
 				opShowMask.MATTEPAINTER_VAR_layerIndex = i
 
+class MATTEPAINTER_PT_panelCameraProjection(bpy.types.Panel):
+	bl_label = "Camera Projection"
+	bl_idname = "MATTEPAINTER_PT_panelCameraProjection"
+	bl_space_type = 'VIEW_3D'
+	bl_region_type = 'UI'
+	bl_category = 'MattePainter'
+	bl_parent_id = 'MATTEPAINTER_PT_panelMain'
+
+	def draw(self, context):
+		layout = self.layout
+
+		# Save All Button
+		row = layout.row()
+		row.operator(MATTEPAINTER_OT_setBackgroundImage.bl_idname, text='', icon='FILE_FOLDER')
+		row.operator(MATTEPAINTER_OT_projectImage.bl_idname, text='Texture Project', icon_value=727)			
+
 
 class MATTEPAINTER_PT_panelFileManagement(bpy.types.Panel):
 	bl_label = "File Management"
@@ -897,9 +1015,9 @@ class MATTEPAINTER_PT_panelColorGrade(bpy.types.Panel):
 	def draw(self, context):
 		if not bpy.context.active_object == None and not bpy.context.active_object.type == 'MESH':
 			return
-		layout = self.layout
-		layer_nodes = bpy.context.active_object.data.materials[0].node_tree.nodes
+		layout = self.layout			
 		if (not bpy.context.active_object == None and bpy.context.active_object.users_collection[0] == bpy.data.collections['MattePainter']):			
+			layer_nodes = bpy.context.active_object.data.materials[0].node_tree.nodes
 			box = layout.box()			
 			box.enabled = True
 			box.alert = False
@@ -926,6 +1044,7 @@ def register():
 	# Interface
 	bpy.utils.register_class(MATTEPAINTER_PT_panelMain)
 	bpy.utils.register_class(MATTEPAINTER_PT_panelLayers)
+	bpy.utils.register_class(MATTEPAINTER_PT_panelCameraProjection)	
 	bpy.utils.register_class(MATTEPAINTER_PT_panelFileManagement)
 	bpy.utils.register_class(MATTEPAINTER_PT_panelColorGrade)
 
@@ -947,6 +1066,9 @@ def register():
 	bpy.utils.register_class(MATTEPAINTER_OT_layerShowMask)
 	bpy.utils.register_class(MATTEPAINTER_OT_layerBlendOriginalAlpha)	
 	bpy.utils.register_class(MATTEPAINTER_OT_moveToCamera)
+
+	bpy.utils.register_class(MATTEPAINTER_OT_setBackgroundImage)
+	bpy.utils.register_class(MATTEPAINTER_OT_projectImage)
 
 	bpy.utils.register_class(MATTEPAINTER_OT_toggleCurves)
 	bpy.utils.register_class(MATTEPAINTER_OT_toggleHSV)
@@ -1002,6 +1124,7 @@ def unregister():
 	# Interface
 	bpy.utils.unregister_class(MATTEPAINTER_PT_panelMain)
 	bpy.utils.unregister_class(MATTEPAINTER_PT_panelLayers)
+	bpy.utils.unregister_class(MATTEPAINTER_PT_panelCameraProjection)
 	bpy.utils.unregister_class(MATTEPAINTER_PT_panelFileManagement)
 	bpy.utils.unregister_class(MATTEPAINTER_PT_panelColorGrade)
 
@@ -1023,6 +1146,9 @@ def unregister():
 	bpy.utils.unregister_class(MATTEPAINTER_OT_layerShowMask)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_layerBlendOriginalAlpha)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_moveToCamera)
+
+	bpy.utils.unregister_class(MATTEPAINTER_OT_setBackgroundImage)
+	bpy.utils.unregister_class(MATTEPAINTER_OT_projectImage)
 
 	bpy.utils.unregister_class(MATTEPAINTER_OT_toggleCurves)
 	bpy.utils.unregister_class(MATTEPAINTER_OT_toggleHSV)
