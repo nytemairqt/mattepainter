@@ -609,6 +609,7 @@ class MATTEPAINTER_OT_makeUnique(bpy.types.Operator):
 			pixels = [1.0] * (4 * width * height)
 			new_mask.pixels = pixels
 			node_mask.image = new_mask
+			self.report({"INFO"}, 'Made Shader Tree Unique.')
 
 		return {'FINISHED'}	
 
