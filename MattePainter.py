@@ -165,7 +165,7 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	link = links.new(node_HSV.outputs[0], node_color.inputs[0]) # HSV -> Color
 	link = links.new(node_color.outputs[0], node_mix.inputs[2]) # Color -> Mix Shader	
 	link = links.new(node_transparent.outputs[0], node_mix.inputs[1]) # Transparent BSDF -> Mix Shader
-	link = links.new(node_invert.outputs[0], node_opacity.inputs[2]) # Invert -> Opacity
+	link = links.new(node_combine_original_alpha.outputs[0], node_opacity.inputs[2]) # Invert -> Opacity
 	link = links.new(node_opacity.outputs[0], node_mix.inputs[0]) # Opacity -> Mix
 	link = links.new(node_mix.outputs[0], material_output.inputs[0]) # Mix -> Output
 	link = links.new(node_coord.outputs[2], node_mixRGB.inputs[1]) # Coord -> MixRGB
@@ -183,10 +183,9 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 		link = links.new(node_bump.outputs[0], node_color.inputs[22]) # Bump -> Color (Bump)
 		
 	if not mask == None:
-		#link = links.new(node_mask.outputs[0], node_invert.inputs[1]) # Mask -> Invert Input
 		link = links.new(node_overlayRGB.outputs[0], node_mask.inputs[0]) # OverlayRGB -> Mask
-		link = links.new(node_mask.outputs[0], node_combine_original_alpha.inputs[1]) # Mask -> Combine
-		link = links.new(node_combine_original_alpha.outputs[0], node_invert.inputs[1]) # Combine -> Invert		
+		link = links.new(node_mask.outputs[0], node_invert.inputs[1]) # Mask -> Invert
+		link = links.new(node_invert.outputs[0], node_combine_original_alpha.inputs[1])	
 	else:
 		link = links.new(node_albedo.outputs[1], node_invert.inputs[1]) # Albedo Alpha -> Invert Input
 		link = links.new(node_overlayRGB.outputs[0], node_albedo.inputs[0]) # OverlayRGB -> Albedo
@@ -197,8 +196,8 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	node_color.location = Vector((-100.0, -200.0))
 	node_transparent.location= Vector((-100.0, -50.0))
 	node_albedo.location = Vector((-1500.0, -300.0))	
-	node_invert.location = Vector((-1000.0, 200.0))
-	node_combine_original_alpha.location = Vector((-1200, 200))
+	node_invert.location = Vector((-1200.0, 200.0))
+	node_combine_original_alpha.location = Vector((-1000, 200))
 	node_opacity.location = Vector((-800.0, 200.0))
 	node_HSV.location = Vector((-800.0, -300.0))
 	node_curves.location = Vector((-1100.0, -300.0))
@@ -474,6 +473,7 @@ class MATTEPAINTER_OT_layerVisibilityActive(bpy.types.Operator):
 
 		active_object.hide_viewport = 1-active_object.hide_render
 		active_object.hide_render = 1-active_object.hide_render
+
 		return {'FINISHED'}			
 
 class MATTEPAINTER_OT_layerLock(bpy.types.Operator):
