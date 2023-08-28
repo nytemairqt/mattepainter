@@ -419,7 +419,6 @@ class MATTEPAINTER_OT_paintMask(bpy.types.Operator):
 			return {'CANCELLED'}
 		bpy.ops.object.transform_apply(scale=True)
 		bpy.ops.object.mode_set(mode='TEXTURE_PAINT')
-		bpy.context.scene.tool_settings.image_paint.use_backface_culling = False
 		return {'FINISHED'}
 
 class MATTEPAINTER_OT_layerSelect(bpy.types.Operator):
@@ -1075,11 +1074,13 @@ class MATTEPAINTER_PT_panelCameraProjection(bpy.types.Panel):
 
 		# Save All Button
 		row = layout.row()
-		row.operator(MATTEPAINTER_OT_setBackgroundImage.bl_idname, text='', icon='FILE_FOLDER')
-		row.operator(MATTEPAINTER_OT_matchBackgroundImageResolution.bl_idname, text='', icon='RESTRICT_VIEW_OFF')
-		button_project_image = row.operator(MATTEPAINTER_OT_projectImage.bl_idname, text='Project', icon_value=727)
-		button_project_image.use_bsdf = context.scene.MATTEPAINTER_VAR_useBSDF
-		row.operator(MATTEPAINTER_OT_clearBackgroundImages.bl_idname, text='', icon='CANCEL')		
+		row.operator(MATTEPAINTER_OT_setBackgroundImage.bl_idname, text='Open Image', icon='FILE_FOLDER')
+		row.operator(MATTEPAINTER_OT_matchBackgroundImageResolution.bl_idname, text='Match Scene', icon='RESTRICT_VIEW_OFF')
+		row = layout.row()
+		button_project_image = row.operator(MATTEPAINTER_OT_projectImage.bl_idname, text='Project To Mesh', icon_value=727)
+		row.operator(MATTEPAINTER_OT_clearBackgroundImages.bl_idname, text='Close Image', icon='CANCEL')		
+		button_project_image.use_bsdf = context.scene.MATTEPAINTER_VAR_useBSDF	
+			
 
 
 class MATTEPAINTER_PT_panelFileManagement(bpy.types.Panel):
