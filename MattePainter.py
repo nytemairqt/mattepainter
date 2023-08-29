@@ -130,8 +130,6 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	node_invert.mute = True	
 	node_albedo.image = image_file
 
-
-
 	if image_file.source == "MOVIE":
 		node_albedo.image_user.use_cyclic = True 
 		node_albedo.image_user.use_auto_refresh = True
@@ -165,7 +163,7 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	link = links.new(node_HSV.outputs[0], node_color.inputs[0]) # HSV -> Color
 	link = links.new(node_color.outputs[0], node_mix.inputs[2]) # Color -> Mix Shader	
 	link = links.new(node_transparent.outputs[0], node_mix.inputs[1]) # Transparent BSDF -> Mix Shader
-	link = links.new(node_combine_original_alpha.outputs[0], node_opacity.inputs[2]) # Invert -> Opacity
+	link = links.new(node_combine_original_alpha.outputs[0], node_opacity.inputs[2]) # Combine -> Opacity
 	link = links.new(node_opacity.outputs[0], node_mix.inputs[0]) # Opacity -> Mix
 	link = links.new(node_mix.outputs[0], material_output.inputs[0]) # Mix -> Output
 	link = links.new(node_coord.outputs[2], node_mixRGB.inputs[1]) # Coord -> MixRGB
@@ -185,7 +183,7 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	if not mask == None:
 		link = links.new(node_overlayRGB.outputs[0], node_mask.inputs[0]) # OverlayRGB -> Mask
 		link = links.new(node_mask.outputs[0], node_invert.inputs[1]) # Mask -> Invert
-		link = links.new(node_invert.outputs[0], node_combine_original_alpha.inputs[1])	
+		link = links.new(node_invert.outputs[0], node_combine_original_alpha.inputs[1])	# Invert -> Combine
 	else:
 		link = links.new(node_albedo.outputs[1], node_invert.inputs[1]) # Albedo Alpha -> Invert Input
 		link = links.new(node_overlayRGB.outputs[0], node_albedo.inputs[0]) # OverlayRGB -> Albedo
@@ -767,6 +765,7 @@ class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 
 		bpy.ops.wm.tool_set_by_id(name="builtin_brush.Fill")
 		bpy.ops.paint.project_image(image=background_image.image.name)
+		bpy.ops.image.save_all_modified()
 
 		if previous_mode == 'EDIT':
 			bpy.ops.object.mode_set(mode='EDIT')
