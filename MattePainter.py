@@ -45,7 +45,6 @@ from gpu_extras.batch import batch_for_shader
 def MATTEPAINTER_FN_setObjectAsLayer(obj):
 	obj.MATTEPAINTER_VAR_isLayer = True
 
-
 def MATTEPAINTER_FN_findLayerCollectionByName(name, collection):
 	# Recursive search for a Collection with the name "MattePainter".
 	for c in collection.children:
@@ -471,7 +470,6 @@ class MATTEPAINTER_OT_layerVisibilityActive(bpy.types.Operator):
 
 		active_object.hide_viewport = 1-active_object.hide_render
 		active_object.hide_render = 1-active_object.hide_render
-
 		return {'FINISHED'}			
 
 class MATTEPAINTER_OT_layerLock(bpy.types.Operator):
@@ -553,7 +551,6 @@ class MATTEPAINTER_OT_layerShowMask(bpy.types.Operator):
 			link = links.new(combine_original_alpha.outputs[0], invert.inputs[1])
 			link = links.new(albedo.outputs[0], curves.inputs[1])
 			link = links.new(opacity.outputs[0], mix.inputs[0])
-		
 		return {'FINISHED'}		
 
 class MATTEPAINTER_OT_layerBlendOriginalAlpha(bpy.types.Operator):
@@ -643,8 +640,6 @@ class MATTEPAINTER_OT_setBackgroundImage(bpy.types.Operator, ImportHelper):
 		camera.data.background_images[0].frame_method = 'FIT'
 
 		camera.data.background_images[0].display_depth = 'FRONT'
-
-		# End Method
 		return {'FINISHED'}	
 
 class MATTEPAINTER_OT_matchBackgroundImageResolution(bpy.types.Operator):
@@ -667,7 +662,6 @@ class MATTEPAINTER_OT_matchBackgroundImageResolution(bpy.types.Operator):
 		
 		bpy.data.scenes[0].render.resolution_x = width
 		bpy.data.scenes[0].render.resolution_y = height
-
 		return{'FINISHED'}
 
 class MATTEPAINTER_OT_clearBackgroundImages(bpy.types.Operator):
@@ -696,15 +690,13 @@ class MATTEPAINTER_OT_clearBackgroundImages(bpy.types.Operator):
 
 class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 	# Projects an edited Render from the active camera back onto the Object.
-
 	bl_idname = "mattepainter.project_image"
 	bl_label = "Project Image"
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Projects the Camera's Background Image onto the selected Object"
 
-
 	use_bsdf: bpy.props.BoolProperty(name="project_use_bsdf", default=False)
-
+	project_resolution: bpy.props.FloatProperty(name='project_resolution', default=0.25)
 
 	@classmethod
 	def poll(cls, context):
@@ -724,12 +716,14 @@ class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 			return{'CANCELLED'}
 
 		background_image = camera.data.background_images[0]	
-		width = background_image.image.size[0]	
-		height = background_image.image.size[1]
+		#width = background_image.image.size[0]	
+		#height = background_image.image.size[1]
+
+		width = int(background_image.image.size[0] * self.project_resolution)
+		height = int(background_image.image.size[1] * self.project_resolution)
 		previous_mode = context.mode
 
 		# Create Material & Unwrap
-
 		active_object.data.materials.clear()
 		name = f'{background_image.image.name}_projection'
 		material = bpy.data.materials.new(name=name)
@@ -776,7 +770,6 @@ class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 		node_mask = nodes.get('transparency_mask')
 		node_mask.select = True   
 		nodes.active = node_mask
-
 		return {'FINISHED'}	
 
 #--------------------------------------------------------------
@@ -803,7 +796,6 @@ class MATTEPAINTER_OT_moveToCamera(bpy.types.Operator):
 			constraint.target = camera
 			constraint.distance = limit_distance 
 			bpy.ops.constraint.apply(constraint=constraint.name)
-
 		return {'FINISHED'}	
 
 class MATTEPAINTER_OT_makeSequence(bpy.types.Operator):
@@ -834,7 +826,6 @@ class MATTEPAINTER_OT_makeSequence(bpy.types.Operator):
 				image_user.frame_duration = frames
 			else:
 				image_user.frame_duration = 1
-
 		return {'FINISHED'}	
 
 class MATTEPAINTER_OT_saveAllImages(bpy.types.Operator):
@@ -1071,17 +1062,16 @@ class MATTEPAINTER_PT_panelCameraProjection(bpy.types.Panel):
 
 	def draw(self, context):
 		layout = self.layout
-
-		# Save All Button
 		row = layout.row()
 		row.operator(MATTEPAINTER_OT_setBackgroundImage.bl_idname, text='Open Image', icon='FILE_FOLDER')
 		row.operator(MATTEPAINTER_OT_matchBackgroundImageResolution.bl_idname, text='Match Scene', icon='RESTRICT_VIEW_OFF')
 		row = layout.row()
 		button_project_image = row.operator(MATTEPAINTER_OT_projectImage.bl_idname, text='Project To Mesh', icon_value=727)
 		row.operator(MATTEPAINTER_OT_clearBackgroundImages.bl_idname, text='Close Image', icon='CANCEL')		
-		button_project_image.use_bsdf = context.scene.MATTEPAINTER_VAR_useBSDF	
-			
-
+		button_project_image.use_bsdf = context.scene.MATTEPAINTER_VAR_useBSDF		
+		row = layout.row()
+		row.prop(context.scene, 'MATTEPAINTER_VAR_projectResolution', text='Scale Factor')
+		button_project_image.project_resolution = context.scene.MATTEPAINTER_VAR_projectResolution
 
 class MATTEPAINTER_PT_panelFileManagement(bpy.types.Panel):
 	bl_label = "File Management"
@@ -1094,8 +1084,6 @@ class MATTEPAINTER_PT_panelFileManagement(bpy.types.Panel):
 
 	def draw(self, context):
 		layout = self.layout
-
-		# Save All Button
 		row = layout.row()
 		row.operator(MATTEPAINTER_OT_saveAllImages.bl_idname, text="Save All", icon_value=727)
 		row.operator(MATTEPAINTER_OT_clearUnused.bl_idname, text="Clear Unused", icon_value=21)
@@ -1146,22 +1134,17 @@ class MATTEPAINTER_PT_panelColorGrade(bpy.types.Panel):
 			box.prop(layer_nodes[r"HSV"].inputs[1], 'default_value', text=r"Saturation", emboss=True, slider=True)
 			box.prop(layer_nodes[r"HSV"].inputs[2], 'default_value', text=r"Value", emboss=True, slider=True)
 
-
-
-
 addon_keymaps = []
 
 #--------------------------------------------------------------
 # Register 
 #--------------------------------------------------------------
 
-
 classes_interface = (MATTEPAINTER_PT_panelMain, MATTEPAINTER_PT_panelLayers, MATTEPAINTER_PT_panelCameraProjection, MATTEPAINTER_PT_panelFileManagement, MATTEPAINTER_PT_panelColorGrade)
 classes_functionality = (MATTEPAINTER_OT_newLayerFromFile, MATTEPAINTER_OT_newEmptyPaintLayer, MATTEPAINTER_OT_newLayerFromClipboard, MATTEPAINTER_OT_paintMask, MATTEPAINTER_OT_makeUnique, MATTEPAINTER_OT_makeSequence, MATTEPAINTER_OT_saveAllImages, MATTEPAINTER_OT_clearUnused, MATTEPAINTER_OT_layerSelect, MATTEPAINTER_OT_layerVisibility, MATTEPAINTER_OT_layerVisibilityActive, MATTEPAINTER_OT_layerLock, MATTEPAINTER_OT_layerInvertMask, MATTEPAINTER_OT_layerInvertMaskActive, MATTEPAINTER_OT_layerShowMask, MATTEPAINTER_OT_layerBlendOriginalAlpha, MATTEPAINTER_OT_moveToCamera)
 classes_projection = (MATTEPAINTER_OT_setBackgroundImage, MATTEPAINTER_OT_matchBackgroundImageResolution, MATTEPAINTER_OT_clearBackgroundImages, MATTEPAINTER_OT_projectImage)
 classes_colorgrading = (MATTEPAINTER_OT_toggleCurves, MATTEPAINTER_OT_toggleHSV)
 classes_painting_tools = (MATTEPAINTER_OT_toolBrush, MATTEPAINTER_OT_toolLine, MATTEPAINTER_OT_fillAll)
-
 
 def register():
 
@@ -1181,6 +1164,7 @@ def register():
 	bpy.types.Object.MATTEPAINTER_VAR_layerIndex = bpy.props.IntProperty(name='MATTEPAINTER_VAR_layerIndex',description='',subtype='NONE',options=set(), default=0)	
 	bpy.types.Object.MATTEPAINTER_VAR_isLayer = bpy.props.BoolProperty(name='MATTEPAINTER_VAR_isLayer', default=False)
 	bpy.types.Scene.MATTEPAINTER_VAR_useBSDF = bpy.props.BoolProperty(name="MATTEPAINTER_VAR_useBSDF", default=False, description='When enabled, uses a PBR-Based Shader Tree instead of an emissive one.')
+	bpy.types.Scene.MATTEPAINTER_VAR_projectResolution = bpy.props.FloatProperty(name='MATTEPAINTER_VAR_projectResolution', default=0.25, soft_min=0.0, soft_max=1.0, description='Resolution scaling factor for projected texture.')
 
 	# Keymaps
 	wm = bpy.context.window_manager
@@ -1218,10 +1202,7 @@ def register():
 		# Switch to Paint Mode
 		kmi = km.keymap_items.new(MATTEPAINTER_OT_paintMask.bl_idname, type='LEFTMOUSE', value='PRESS', shift=True, ctrl=True)
 		addon_keymaps.append((km, kmi))
-		
-		
-
-
+			
 def unregister():
 
 	# Unregister
@@ -1241,6 +1222,7 @@ def unregister():
 	del bpy.types.Object.MATTEPAINTER_VAR_layerIndex
 	del bpy.types.Scene.MATTEPAINTER_VAR_useBSDF
 	del bpy.types.Object.MATTEPAINTER_VAR_isLayer
+	del bpy.types.Scene.MATTEPAINTER_VAR_projectResolution
 
 	# Keymaps
 	for km, kmi in addon_keymaps:
