@@ -1164,7 +1164,7 @@ def register():
 	bpy.types.Object.MATTEPAINTER_VAR_layerIndex = bpy.props.IntProperty(name='MATTEPAINTER_VAR_layerIndex',description='',subtype='NONE',options=set(), default=0)	
 	bpy.types.Object.MATTEPAINTER_VAR_isLayer = bpy.props.BoolProperty(name='MATTEPAINTER_VAR_isLayer', default=False)
 	bpy.types.Scene.MATTEPAINTER_VAR_useBSDF = bpy.props.BoolProperty(name="MATTEPAINTER_VAR_useBSDF", default=False, description='When enabled, uses a PBR-Based Shader Tree instead of an emissive one.')
-	bpy.types.Scene.MATTEPAINTER_VAR_projectResolution = bpy.props.FloatProperty(name='MATTEPAINTER_VAR_projectResolution', default=0.25, soft_min=0.0, soft_max=1.0, description='Resolution scaling factor for projected texture.')
+	bpy.types.Scene.MATTEPAINTER_VAR_projectResolution = bpy.props.FloatProperty(name='MATTEPAINTER_VAR_projectResolution', default=0.25, soft_min=0.1, soft_max=1.0, description='Resolution scaling factor for projected texture.')
 
 	# Keymaps
 	wm = bpy.context.window_manager
