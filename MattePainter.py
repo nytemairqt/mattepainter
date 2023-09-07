@@ -716,8 +716,6 @@ class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 			return{'CANCELLED'}
 
 		background_image = camera.data.background_images[0]	
-		#width = background_image.image.size[0]	
-		#height = background_image.image.size[1]
 
 		width = int(background_image.image.size[0] * self.project_resolution)
 		height = int(background_image.image.size[1] * self.project_resolution)
@@ -752,10 +750,15 @@ class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 		if not context.mode == 'EDIT':
 			bpy.ops.object.mode_set(mode='EDIT')
 		bpy.ops.mesh.select_all(action='SELECT')	
-		bpy.ops.uv.project_from_view(camera_bounds=True, correct_aspect=False, scale_to_bounds=True)
+		#bpy.ops.uv.project_from_view(camera_bounds=True, correct_aspect=False, scale_to_bounds=True)
+		bpy.ops.uv.smart_project(scale_to_bounds=True)
 
 		if not context.mode == 'PAINT_TEXTURE':
 			bpy.ops.object.mode_set(mode='TEXTURE_PAINT')
+
+		# Set to Image Mode for Painting
+		bpy.context.scene.tool_settings.image_paint.mode = 'IMAGE'
+		bpy.context.scene.tool_settings.image_paint.canvas = projection_image
 
 		bpy.ops.wm.tool_set_by_id(name="builtin_brush.Fill")
 		bpy.ops.paint.project_image(image=background_image.image.name)
