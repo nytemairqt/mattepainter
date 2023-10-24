@@ -29,7 +29,6 @@ from pathlib import Path
 import shutil
 from bpy_extras import view3d_utils
 from bpy_extras.io_utils import ImportHelper
-from PIL import Image
 import time, sys
 
 # Draw Functions
