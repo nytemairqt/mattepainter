@@ -89,11 +89,13 @@ def MATTEPAINTER_FN_addMask(name, width, height):
 	mask.pixels = pixels
 	return mask 
 
-def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer=False, useBSDF=False):
+def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, useBSDF=False):
+	# Delete original Material Nodes
 	material_output = nodes.get("Material Output") # Output Node
 	principled_bsdf = nodes.get("Principled BSDF") 
 	nodes.remove(principled_bsdf) # Delete BSDF
 
+	# Check for BSDF
 	if useBSDF:
 		node_color = nodes.new(type="ShaderNodeBsdfPrincipled")
 		node_colorramp_roughness = nodes.new(type='ShaderNodeValToRGB')
@@ -101,6 +103,8 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 		node_bump = nodes.new(type='ShaderNodeBump')
 	else:
 		node_color = nodes.new(type="ShaderNodeEmission")
+
+	# Create the rest of the nodes
 	node_transparent = nodes.new(type="ShaderNodeBsdfTransparent")
 	node_mix = nodes.new(type="ShaderNodeMixShader")
 	node_invert = nodes.new(type="ShaderNodeInvert")
@@ -125,10 +129,8 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	node_invert.name = 'invert'
 	node_combine_original_alpha.name = 'combineoriginalalpha'
 
-	# Default Values
-	node_invert.mute = True	
+	# Setup Image / Video
 	node_albedo.image = image_file
-
 	if image_file.source == "MOVIE":
 		node_albedo.image_user.use_cyclic = True 
 		node_albedo.image_user.use_auto_refresh = True
@@ -142,6 +144,8 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 		node_mask.select = True		
 		nodes.active = node_mask	
 
+	# Default Values
+	node_invert.mute = True	
 	node_noise.inputs[2].default_value = 1000000.0
 	node_opacity.inputs[0].default_value = 1.0
 	node_mixRGB.blend_type = "MIX"	
@@ -156,7 +160,7 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	if useBSDF:
 		node_bump.inputs[0].default_value = .2
 
-	# Connections
+	# Links
 	link = links.new(node_albedo.outputs[0], node_curves.inputs[1]) # Albedo -> Curves
 	link = links.new(node_curves.outputs[0], node_HSV.inputs[4]) # Curves -> HSV
 	link = links.new(node_HSV.outputs[0], node_color.inputs[0]) # HSV -> Color
@@ -170,6 +174,7 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	link = links.new(node_noise.outputs[1], node_overlayRGB.inputs[2]) # Noise -> OverlayRGB
 	link = links.new(node_mixRGB.outputs[0], node_overlayRGB.inputs[1]) # MixRGB -> OverlayRGB
 	link = links.new(node_overlayRGB.outputs[0], node_albedo.inputs[0]) # OverlayRGB -> Albedo
+	link = links.new(node_invert.outputs[0], node_combine_original_alpha.inputs[1])	# Invert -> Combine
 
 	if useBSDF:
 		link = links.new(node_HSV.outputs[0], node_colorramp_specular.inputs[0]) # HSV -> ColorRamp Specular
@@ -182,7 +187,6 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	if not mask == None:
 		link = links.new(node_overlayRGB.outputs[0], node_mask.inputs[0]) # OverlayRGB -> Mask
 		link = links.new(node_mask.outputs[0], node_invert.inputs[1]) # Mask -> Invert
-		link = links.new(node_invert.outputs[0], node_combine_original_alpha.inputs[1])	# Invert -> Combine
 	else:
 		link = links.new(node_albedo.outputs[1], node_invert.inputs[1]) # Albedo Alpha -> Invert Input
 		link = links.new(node_overlayRGB.outputs[0], node_albedo.inputs[0]) # OverlayRGB -> Albedo
@@ -273,7 +277,7 @@ class MATTEPAINTER_OT_newLayerFromFile(bpy.types.Operator, ImportHelper):
 		nodes = material.node_tree.nodes
 		links = material.node_tree.links
 
-		MATTEPAINTER_FN_setShaders(nodes=nodes, links=links, image_file=image, mask=mask, isPaintLayer=False, useBSDF=self.use_bsdf)	
+		MATTEPAINTER_FN_setShaders(nodes=nodes, links=links, image_file=image, mask=mask, useBSDF=self.use_bsdf)	
 
 		# End Method
 		return {'FINISHED'}	
@@ -326,7 +330,7 @@ class MATTEPAINTER_OT_newEmptyPaintLayer(bpy.types.Operator):
 		nodes = material.node_tree.nodes
 		links = material.node_tree.links
 
-		MATTEPAINTER_FN_setShaders(nodes=nodes, links=links, image_file=image, mask=None, isPaintLayer=True)
+		MATTEPAINTER_FN_setShaders(nodes=nodes, links=links, image_file=image, mask=None)
 
 		return {'FINISHED'}
 
@@ -391,7 +395,7 @@ class MATTEPAINTER_OT_newLayerFromClipboard(bpy.types.Operator):
 		nodes = material.node_tree.nodes
 		links = material.node_tree.links
 
-		MATTEPAINTER_FN_setShaders(nodes=nodes, links=links, image_file=image, mask=mask, isPaintLayer=False, useBSDF=self.use_bsdf)
+		MATTEPAINTER_FN_setShaders(nodes=nodes, links=links, image_file=image, mask=mask, useBSDF=self.use_bsdf)
 		self.report({"INFO"}, "Imported Clipboard.")	
 		return {'FINISHED'}		
 
@@ -736,7 +740,7 @@ class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 		pixels = [1.0] * (4 * width * height)
 		projection_image.pixels = pixels
 	
-		MATTEPAINTER_FN_setShaders(nodes, links, projection_image, mask=mask, isPaintLayer=False, useBSDF=self.use_bsdf)
+		MATTEPAINTER_FN_setShaders(nodes, links, projection_image, mask=mask, useBSDF=self.use_bsdf)
 
 		# Select Image for Projection
 		node_albedo = nodes.get('albedo')
