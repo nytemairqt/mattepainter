@@ -115,6 +115,7 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None, isPaintLayer
 	node_combine_original_alpha = nodes.new(type="ShaderNodeMixRGB")
 		
 	# Naming Nodes for Color Grading
+	material_output.name = 'material_output'
 	node_overlayRGB.name = 'blur_mix'
 	node_curves.name = 'curves'
 	node_HSV.name = 'HSV'	
@@ -518,6 +519,7 @@ class MATTEPAINTER_OT_layerInvertMaskActive(bpy.types.Operator):
 
 
 class MATTEPAINTER_OT_layerShowMask(bpy.types.Operator):
+	# Toggles displaying the Transparency Mask for the Layer
 	bl_idname = "mattepainter.show_mask"
 	bl_label = "Show Mask"
 	bl_options = {"REGISTER", "UNDO"}
@@ -531,25 +533,20 @@ class MATTEPAINTER_OT_layerShowMask(bpy.types.Operator):
 		nodes = material.node_tree.nodes
 		links = material.node_tree.links
 
-		mask = nodes.get("transparency_mask")
-		albedo = nodes.get("albedo")
-		curves = nodes.get("curves")
 		opacity = nodes.get("opacity")
 		mix = nodes.get("mix")
-		invert = nodes.get("invert")
-		combine_original_alpha = nodes.get("combineoriginalalpha")
+		material_output = nodes.get("material_output")
 
-		if combine_original_alpha.outputs[0].links[0].to_node.name == "invert":
-			links.remove(combine_original_alpha.outputs[0].links[0])
-			links.remove(albedo.outputs[0].links[0])
+		# need to send the mask to the output
+
+		if opacity.outputs[0].links[0].to_node.name == 'mix':
+			links.remove(mix.outputs[0].links[0])
 			links.remove(opacity.outputs[0].links[0])
-			mix.inputs[0].default_value = 1.0
-			link = links.new(combine_original_alpha.outputs[0], curves.inputs[1])
+			link = links.new(opacity.outputs[0], material_output.inputs[0])
 		else:
-			links.remove(combine_original_alpha.outputs[0].links[0])
-			link = links.new(combine_original_alpha.outputs[0], invert.inputs[1])
-			link = links.new(albedo.outputs[0], curves.inputs[1])
+			links.remove(opacity.outputs[0].links[0])
 			link = links.new(opacity.outputs[0], mix.inputs[0])
+			link = links.new(mix.outputs[0], material_output.inputs[0])
 		return {'FINISHED'}		
 
 class MATTEPAINTER_OT_layerBlendOriginalAlpha(bpy.types.Operator):
@@ -1044,7 +1041,8 @@ class MATTEPAINTER_PT_panelLayers(bpy.types.Panel):
 				opLock = row.operator(MATTEPAINTER_OT_layerLock.bl_idname, text="", emboss=False, depress=True, icon_value=41 if layer_object.hide_select else 224)	
 				opInvertMask = row.operator(MATTEPAINTER_OT_layerInvertMask.bl_idname, text="", emboss=False, depress=True, icon='CLIPUV_HLT' if layer_nodes.get('invert').mute else 'CLIPUV_DEHLT')	
 				if not layer_nodes.get('transparency_mask') == None:
-					opShowMask = row.operator(MATTEPAINTER_OT_layerShowMask.bl_idname, text="", emboss=False, depress=True, icon='IMAGE_ALPHA' if layer_nodes.get('transparency_mask').outputs[0].links[0].to_node.name == 'invert' else 'IMAGE_RGB')	
+					#opShowMask = row.operator(MATTEPAINTER_OT_layerShowMask.bl_idname, text="", emboss=False, depress=True, icon='IMAGE_ALPHA' if layer_nodes.get('transparency_mask').outputs[0].links[0].to_node.name == 'invert' else 'IMAGE_RGB')	
+					opShowMask = row.operator(MATTEPAINTER_OT_layerShowMask.bl_idname, text="", emboss=False, depress=True, icon='IMAGE_ALPHA' if layer_nodes.get('opacity').outputs[0].links[0].to_node.name == 'mix' else 'IMAGE_RGB')	
 					opBlendOriginal = row.operator(MATTEPAINTER_OT_layerBlendOriginalAlpha.bl_idname, text="", emboss= False if layer_nodes.get('combineoriginalalpha').mute else True, depress=False , icon='OVERLAY')
 
 				opSelect.MATTEPAINTER_VAR_layerIndex = i
