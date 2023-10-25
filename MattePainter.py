@@ -1041,7 +1041,6 @@ class MATTEPAINTER_PT_panelLayers(bpy.types.Panel):
 				opLock = row.operator(MATTEPAINTER_OT_layerLock.bl_idname, text="", emboss=False, depress=True, icon_value=41 if layer_object.hide_select else 224)	
 				opInvertMask = row.operator(MATTEPAINTER_OT_layerInvertMask.bl_idname, text="", emboss=False, depress=True, icon='CLIPUV_HLT' if layer_nodes.get('invert').mute else 'CLIPUV_DEHLT')	
 				if not layer_nodes.get('transparency_mask') == None:
-					#opShowMask = row.operator(MATTEPAINTER_OT_layerShowMask.bl_idname, text="", emboss=False, depress=True, icon='IMAGE_ALPHA' if layer_nodes.get('transparency_mask').outputs[0].links[0].to_node.name == 'invert' else 'IMAGE_RGB')	
 					opShowMask = row.operator(MATTEPAINTER_OT_layerShowMask.bl_idname, text="", emboss=False, depress=True, icon='IMAGE_ALPHA' if layer_nodes.get('opacity').outputs[0].links[0].to_node.name == 'mix' else 'IMAGE_RGB')	
 					opBlendOriginal = row.operator(MATTEPAINTER_OT_layerBlendOriginalAlpha.bl_idname, text="", emboss= False if layer_nodes.get('combineoriginalalpha').mute else True, depress=False , icon='OVERLAY')
 
@@ -1050,6 +1049,7 @@ class MATTEPAINTER_PT_panelLayers(bpy.types.Panel):
 				opLock.MATTEPAINTER_VAR_layerIndex = i
 				opInvertMask.MATTEPAINTER_VAR_layerIndex = i
 				opShowMask.MATTEPAINTER_VAR_layerIndex = i
+				opBlendOriginal.MATTEPAINTER_VAR_layerIndex = i 
 
 class MATTEPAINTER_PT_panelCameraProjection(bpy.types.Panel):
 	bl_label = "Camera Projection"
