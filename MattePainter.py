@@ -5,7 +5,7 @@
 bl_info = {
 	"name" : "MattePainter",
 	"author" : "SceneFiller",
-	"version" : (1, 0, 6),
+	"version" : (1, 0, 7),
 	"blender" : (3, 3, 0),
 	"location" : "View3d > Tool",
 	"warning" : "",
