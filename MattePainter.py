@@ -140,6 +140,7 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None):
 
 	# Setup Image / Video
 	node_albedo.image = image_file
+	node_albedo.extension = "CLIP"
 	if image_file.source == "MOVIE":
 		node_albedo.image_user.use_cyclic = True 
 		node_albedo.image_user.use_auto_refresh = True
@@ -296,7 +297,7 @@ class MATTEPAINTER_OT_newLayerFromFile(bpy.types.Operator, ImportHelper):
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)		
 		active_object.data.materials.append(material)
-		material.blend_method = "HASHED"
+		material.blend_method = "BLEND"
 		material.shadow_method = "CLIP"
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
@@ -352,7 +353,7 @@ class MATTEPAINTER_OT_newEmptyPaintLayer(bpy.types.Operator):
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
 		active_object.data.materials.append(material)
-		material.blend_method = "HASHED"
+		material.blend_method = "BLEND"
 		material.shadow_method = "CLIP"
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
@@ -418,7 +419,7 @@ class MATTEPAINTER_OT_newLayerFromClipboard(bpy.types.Operator):
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
 		active_object.data.materials.append(material)
-		material.blend_method = "HASHED"
+		material.blend_method = "BLEND"
 		material.shadow_method = "CLIP"
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
@@ -810,7 +811,7 @@ class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 		name = f'{background_image.image.name}_projection'
 		material = bpy.data.materials.new(name=name)
 		material.use_nodes = True
-		material.blend_method = "HASHED"
+		material.blend_method = "BLEND"
 		material.shadow_method = "CLIP"
 		active_object.data.materials.append(material)
 		nodes = material.node_tree.nodes
