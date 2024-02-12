@@ -5,8 +5,8 @@
 bl_info = {
 	"name" : "MattePainter",
 	"author" : "SceneFiller",
-	"version" : (1, 0, 7),
-	"blender" : (3, 3, 0),
+	"version" : (1, 0, 8),
+	"blender" : (4, 0, 2),
 	"location" : "View3d > Tool",
 	"warning" : "",
 	"wiki_url" : "",
@@ -96,7 +96,14 @@ def MATTEPAINTER_FN_addMask(name, width, height):
 	mask.pixels = pixels
 	return mask 
 
-def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None):
+def MATTEPAINTER_FN_checkForAlpha(image):
+	bit = 32 if image.is_float else 8
+	if image.depth == 2*bit or image.depth == 4*bit:
+		return True 
+	else:
+		return False
+
+def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None):	
 	# Delete original Material Nodes
 	material_output = nodes.get("Material Output") # Output Node
 
@@ -145,6 +152,7 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None):
 		node_mask.image = mask
 		node_mask.select = True		
 		nodes.active = node_mask	
+		node_mask.extension = "CLIP"
 
 	# Default Values
 	node_invert.mute = True	
@@ -153,7 +161,10 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None):
 	node_mixRGB.blend_type = "MIX"	
 	node_mixRGB.inputs[0].default_value = 0.0
 	node_combine_original_alpha.blend_type = "MULTIPLY"
-	node_combine_original_alpha.mute = True
+	if MATTEPAINTER_FN_checkForAlpha(node_albedo.image):
+		node_combine_original_alpha.mute = False
+	else:
+		node_combine_original_alpha.mute = True	
 	node_combine_original_alpha.inputs[0].default_value = 1.0
 	node_overlayRGB.blend_type = "OVERLAY"
 	node_overlayRGB.inputs[0].default_value = 0.0
@@ -161,11 +172,14 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None):
 	node_opacity.inputs[1].default_value = (0, 0, 0, 1)
 	node_bump.inputs[0].default_value = 0.0
 	node_color.inputs[0].default_value = (0, 0, 0, 1)
+	if bpy.app.version > (3, 99, 99):
+		node_color.inputs[26].default_value = (0, 0, 0, 1)
+		node_color.inputs[27].default_value = 1.0
+
 
 	# Links
 	link = links.new(node_albedo.outputs[0], node_curves.inputs[1]) # Albedo -> Curves
-	link = links.new(node_curves.outputs[0], node_HSV.inputs[4]) # Curves -> HSV
-	link = links.new(node_HSV.outputs[0], node_color.inputs[19]) # HSV -> Emit
+	link = links.new(node_curves.outputs[0], node_HSV.inputs[4]) # Curves -> HSV	
 	link = links.new(node_color.outputs[0], node_mix.inputs[2]) # Color -> Mix Shader	
 	link = links.new(node_transparent.outputs[0], node_mix.inputs[1]) # Transparent BSDF -> Mix Shader
 	link = links.new(node_combine_original_alpha.outputs[0], node_opacity.inputs[2]) # Combine -> Opacity
@@ -177,14 +191,22 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None):
 	link = links.new(node_mixRGB.outputs[0], node_overlayRGB.inputs[1]) # MixRGB -> OverlayRGB
 	link = links.new(node_overlayRGB.outputs[0], node_albedo.inputs[0]) # OverlayRGB -> Albedo
 	link = links.new(node_invert.outputs[0], node_combine_original_alpha.inputs[1])	# Invert -> Combine
-
-	#if useBSDF:
-	link = links.new(node_HSV.outputs[0], node_colorramp_specular.inputs[0]) # HSV -> ColorRamp Specular
-	link = links.new(node_colorramp_specular.outputs[0], node_color.inputs[7]) # ColorRamp Specular -> Color (Specular)
-	link = links.new(node_HSV.outputs[0], node_colorramp_roughness.inputs[0]) # HSV -> ColorRamp Roughness		
-	link = links.new(node_colorramp_roughness.outputs[0], node_color.inputs[9]) # ColorRamp Specular -> Color (Roughness)
+	link = links.new(node_HSV.outputs[0], node_colorramp_specular.inputs[0]) # HSV -> ColorRamp Specular	
+	link = links.new(node_HSV.outputs[0], node_colorramp_roughness.inputs[0]) # HSV -> ColorRamp Roughness			
 	link = links.new(node_HSV.outputs[0], node_bump.inputs[2]) # HSV -> Bump
-	link = links.new(node_bump.outputs[0], node_color.inputs[22]) # Bump -> Color (Bump)
+	link = links.new(node_albedo.outputs[1], node_combine_original_alpha.inputs[2]) # Original Alpha -> Mix
+
+	# Backwards Compatibility < 4.0
+	if bpy.app.version > (3, 99, 99):
+		link = links.new(node_HSV.outputs[0], node_color.inputs[26]) # HSV -> 4.0 Emit Color
+		link = links.new(node_colorramp_roughness.outputs[0], node_color.inputs[2]) # ColorRamp Roughness -> Color (Roughness)
+		link = links.new(node_colorramp_specular.outputs[0], node_color.inputs[12]) # ColorRamp Specular -> Color (Specular)
+		link = links.new(node_bump.outputs[0], node_color.inputs[5]) # Bump -> Color (Bump)
+	else:
+		link = links.new(node_HSV.outputs[0], node_color.inputs[19]) # HSV -> Emit
+		link = links.new(node_colorramp_specular.outputs[0], node_color.inputs[7]) # ColorRamp Specular -> Color (Specular)
+		link = links.new(node_colorramp_roughness.outputs[0], node_color.inputs[9]) # ColorRamp Roughness -> Color (Roughness)
+		link = links.new(node_bump.outputs[0], node_color.inputs[22]) # Bump -> Color (Bump)	
 		
 	if not mask == None:
 		link = links.new(node_overlayRGB.outputs[0], node_mask.inputs[0]) # OverlayRGB -> Mask
@@ -256,7 +278,7 @@ class MATTEPAINTER_OT_newLayerFromFile(bpy.types.Operator, ImportHelper):
 		mask = MATTEPAINTER_FN_addMask(name=mask_name, width=image.size[0], height=image.size[1])		
 
 		# Geometry and Alignment
-		bpy.ops.mesh.primitive_plane_add(enter_editmode=False, align='CURSOR', location=cursor, scale=(1, 1, 1))
+		bpy.ops.mesh.primitive_plane_add(enter_editmode=False, align='CURSOR', location=cursor, scale=(1, 1, 1))		
 		bpy.ops.object.mode_set(mode="EDIT")
 		bpy.ops.mesh.subdivide(number_cuts=1)
 		bpy.ops.object.mode_set(mode="OBJECT")
@@ -264,14 +286,15 @@ class MATTEPAINTER_OT_newLayerFromFile(bpy.types.Operator, ImportHelper):
 		active_object = bpy.context.active_object
 		MATTEPAINTER_FN_setObjectAsLayer(active_object)
 		active_object.name = image.name
-		scene = bpy.context.scene
+		scene = bpy.context.scene		
 
 		active_object.rotation_euler = camera.rotation_euler
 		MATTEPAINTER_FN_setDimensions(target=active_object, image=image, camera=camera, scene=scene)
 		bpy.ops.object.transform_apply(scale=True)
+		bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
 
 		# Shader Setup
-		material = bpy.data.materials.new(name=image.name)
+		material = bpy.data.materials.new(name=image.name)		
 		active_object.data.materials.append(material)
 		material.blend_method = "HASHED"
 		material.shadow_method = "CLIP"
@@ -324,6 +347,7 @@ class MATTEPAINTER_OT_newEmptyPaintLayer(bpy.types.Operator):
 		active_object.rotation_euler = camera.rotation_euler
 		MATTEPAINTER_FN_setDimensions(target=active_object, image=image, camera=camera, scene=scene)
 		bpy.ops.object.transform_apply(scale=True)
+		bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
 
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
@@ -389,6 +413,7 @@ class MATTEPAINTER_OT_newLayerFromClipboard(bpy.types.Operator):
 		active_object.rotation_euler = camera.rotation_euler
 		MATTEPAINTER_FN_setDimensions(target=active_object, image=image, camera=camera, scene=scene)
 		bpy.ops.object.transform_apply(scale=True)
+		bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
 
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
@@ -579,15 +604,24 @@ class MATTEPAINTER_OT_layerUseEmit(bpy.types.Operator):
 		bsdf = nodes.get("Principled BSDF")
 		hsv = nodes.get("HSV")
 
-		if bsdf.inputs[0].links:
-			links.remove(bsdf.inputs[0].links[0])
-			links.new(hsv.outputs[0], bsdf.inputs[19])
-		elif bsdf.inputs[19].links:
-			links.remove(bsdf.inputs[19].links[0])
-			links.new(hsv.outputs[0], bsdf.inputs[0])
+		if bpy.app.version > (3, 99, 99):
+			if bsdf.inputs[0].links:
+				links.remove(bsdf.inputs[0].links[0])
+				links.new(hsv.outputs[0], bsdf.inputs[26])
+			elif bsdf.inputs[26].links:
+				links.remove(bsdf.inputs[26].links[0])
+				links.new(hsv.outputs[0], bsdf.inputs[0])
+			else:
+				return{'CANCELLED'}
 		else:
-			return{'CANCELLED'}
-
+			if bsdf.inputs[0].links:
+				links.remove(bsdf.inputs[0].links[0])
+				links.new(hsv.outputs[0], bsdf.inputs[19])
+			elif bsdf.inputs[19].links:
+				links.remove(bsdf.inputs[19].links[0])
+				links.new(hsv.outputs[0], bsdf.inputs[0])
+			else:
+				return{'CANCELLED'}
 
 		return {'FINISHED'}					
 
@@ -610,10 +644,13 @@ class MATTEPAINTER_OT_layerBlendOriginalAlpha(bpy.types.Operator):
 		albedo = nodes.get("albedo")		
 		combine_original_alpha = nodes.get("combineoriginalalpha")
 
+		'''
+
 		if combine_original_alpha.mute:
 			link = links.new(albedo.outputs[1], combine_original_alpha.inputs[2])
 		else:
 			links.remove(albedo.outputs[1].links[0])
+		'''
 
 		combine_original_alpha.mute = 1-combine_original_alpha.mute
 		return {'FINISHED'}					
@@ -741,6 +778,13 @@ class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 	
 	def execute(self, context):
 		active_object = bpy.context.active_object
+		if active_object is None:
+			self.report({"WARNING"}, "No active object selected.")
+			return{"CANCELLED"}
+		if not context.active_object.type == "MESH":
+			self.report({"WARNING"}, "Target Object cannot receive Projections.")	
+			return {'CANCELLED'}
+
 		# Set as Layer and move into MattePainter collection
 		MATTEPAINTER_FN_moveObjectToCollection(active_object)
 		MATTEPAINTER_FN_setObjectAsLayer(active_object)
@@ -777,7 +821,8 @@ class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 		mask = MATTEPAINTER_FN_addMask(name=mask_name, width=width, height=height)	
 
 		projection_image = bpy.data.images.new(name=name, width=width, height=height)
-		pixels = [1.0] * (4 * width * height)
+		#pixels = [1.0] * (4 * width * height)
+		pixels = [0.0] * (4 * width * height)
 		projection_image.pixels = pixels
 	
 		MATTEPAINTER_FN_setShaders(nodes, links, projection_image, mask=mask)
@@ -804,12 +849,18 @@ class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 		bpy.ops.paint.project_image(image=background_image.image.name)
 		bpy.ops.image.save_all_modified()
 
+		if MATTEPAINTER_FN_checkForAlpha(background_image.image):
+			nodes.get('combineoriginalalpha').mute = False
+
+
 		if previous_mode == 'EDIT':
 			bpy.ops.object.mode_set(mode='EDIT')
 		else:
 			bpy.ops.object.mode_set(mode='OBJECT')
+
+
 	    
-	    # Select Mask 
+	    # Select Mask For Painting
 		node_mask = nodes.get('transparency_mask')
 		node_mask.select = True   
 		nodes.active = node_mask
@@ -957,7 +1008,7 @@ class MATTEPAINTER_OT_fillAll(bpy.types.Operator):
 
 		# Override
 		area = MATTEPAINTER_FN_contextOverride("VIEW_3D")
-		bpy.context.temp_override(area=area)			
+		bpy.context.temp_override(area=area)		
 		region = bpy.context.region 
 		region3d = bpy.context.space_data.region_3d 
 		object_location = view3d_utils.location_3d_to_region_2d(region, region3d, active_object.location)
