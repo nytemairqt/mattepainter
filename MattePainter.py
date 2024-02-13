@@ -233,7 +233,6 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None):
 	node_coord.location = Vector((-2100.0, 0.0))	
 	if not mask == None:
 		node_mask.location = Vector((-1500.0, 200.0))
-	#if useBSDF:
 	node_colorramp_specular.location = Vector((-500,-300))
 	node_colorramp_roughness.location = Vector((-500,-600))
 	node_bump.location = Vector((-500,-900))
@@ -297,7 +296,7 @@ class MATTEPAINTER_OT_newLayerFromFile(bpy.types.Operator, ImportHelper):
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)		
 		active_object.data.materials.append(material)
-		material.blend_method = "BLEND"
+		material.blend_method = "HASHED"
 		material.shadow_method = "CLIP"
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
@@ -348,16 +347,18 @@ class MATTEPAINTER_OT_newEmptyPaintLayer(bpy.types.Operator):
 		active_object.rotation_euler = camera.rotation_euler
 		MATTEPAINTER_FN_setDimensions(target=active_object, image=image, camera=camera, scene=scene)
 		bpy.ops.object.transform_apply(scale=True)
-		bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
+		#bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
 
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
 		active_object.data.materials.append(material)
-		material.blend_method = "BLEND"
+		material.blend_method = "HASHED"
 		material.shadow_method = "CLIP"
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
 		links = material.node_tree.links
+
+		bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
 
 		MATTEPAINTER_FN_setShaders(nodes=nodes, links=links, image_file=image, mask=None)
 
@@ -419,7 +420,7 @@ class MATTEPAINTER_OT_newLayerFromClipboard(bpy.types.Operator):
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
 		active_object.data.materials.append(material)
-		material.blend_method = "BLEND"
+		material.blend_method = "HASHED"
 		material.shadow_method = "CLIP"
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
@@ -811,7 +812,7 @@ class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 		name = f'{background_image.image.name}_projection'
 		material = bpy.data.materials.new(name=name)
 		material.use_nodes = True
-		material.blend_method = "BLEND"
+		material.blend_method = "HASHED"
 		material.shadow_method = "CLIP"
 		active_object.data.materials.append(material)
 		nodes = material.node_tree.nodes
