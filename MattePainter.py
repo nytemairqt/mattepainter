@@ -443,7 +443,7 @@ class MATTEPAINTER_OT_paintMask(bpy.types.Operator):
 
 	@classmethod
 	def poll(cls, context):		
-		return context.mode not in ['PAINT_TEXTURE']
+		return context.mode not in ['PAINT_TEXTURE', 'PAINT_WEIGHT', 'PAINT_VERTEX']
 
 	def execute(self, context):
 		# Safety Checks
