@@ -452,9 +452,13 @@ class MATTEPAINTER_OT_paintMask(bpy.types.Operator):
 		if not context.active_object.type == "MESH": 
 			self.report({"WARNING"}, "Target Object is not Paintable.")	
 			return {'CANCELLED'}
-		bpy.ops.object.transform_apply(scale=True)
-		bpy.ops.object.mode_set(mode='TEXTURE_PAINT')
-		bpy.context.scene.tool_settings.image_paint.mode = 'MATERIAL'
+		try:
+			bpy.ops.object.transform_apply(scale=True)
+			bpy.ops.object.mode_set(mode='TEXTURE_PAINT')
+			bpy.context.scene.tool_settings.image_paint.mode = 'MATERIAL'
+		except:
+			self.report({"WARNING"}, "Unable to switch context, possible Operator/Context clash.")
+			return{'CANCELLED'}
 		return {'FINISHED'}
 
 class MATTEPAINTER_OT_layerSelect(bpy.types.Operator):
