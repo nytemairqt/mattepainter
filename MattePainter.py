@@ -5,7 +5,7 @@
 bl_info = {
 	"name" : "MattePainter",
 	"author" : "SceneFiller",
-	"version" : (1, 0, 8),
+	"version" : (1, 1, 0),
 	"blender" : (4, 0, 2),
 	"location" : "View3d > Tool",
 	"warning" : "",
@@ -135,12 +135,13 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None):
 	node_opacity.name = 'opacity'	
 	node_albedo.name = 'albedo'
 	node_mix.name = 'mix'
+	node_mixRGB.name = 'mixRGB'
 	node_invert.name = 'invert'
 	node_combine_original_alpha.name = 'combineoriginalalpha'
 
 	# Setup Image / Video
 	node_albedo.image = image_file
-	node_albedo.extension = "CLIP"
+	node_albedo.extension = "CLIP"	
 	if image_file.source == "MOVIE":
 		node_albedo.image_user.use_cyclic = True 
 		node_albedo.image_user.use_auto_refresh = True
@@ -157,64 +158,72 @@ def MATTEPAINTER_FN_setShaders(nodes, links, image_file, mask=None):
 
 	# Default Values
 	node_invert.mute = True	
-	node_noise.inputs[2].default_value = 1000000.0
-	node_opacity.inputs[0].default_value = 1.0
+	node_noise.inputs['Scale'].default_value = 1000000.0	
+	node_opacity.inputs['Fac'].default_value = 1.0
 	node_mixRGB.blend_type = "MIX"	
-	node_mixRGB.inputs[0].default_value = 0.0
+	node_mixRGB.inputs['Fac'].default_value = 0.0
 	node_combine_original_alpha.blend_type = "MULTIPLY"
 	if MATTEPAINTER_FN_checkForAlpha(node_albedo.image):
 		node_combine_original_alpha.mute = False
 	else:
 		node_combine_original_alpha.mute = True	
-	node_combine_original_alpha.inputs[0].default_value = 1.0
+	node_combine_original_alpha.inputs['Fac'].default_value = 1.0
 	node_overlayRGB.blend_type = "OVERLAY"
-	node_overlayRGB.inputs[0].default_value = 0.0
-	node_opacity.inputs[0].default_value = 1.0
-	node_opacity.inputs[1].default_value = (0, 0, 0, 1)
-	node_bump.inputs[0].default_value = 0.0
-	node_color.inputs[0].default_value = (0, 0, 0, 1)
-	if bpy.app.version > (3, 99, 99):
-		node_color.inputs[26].default_value = (0, 0, 0, 1)
+	node_overlayRGB.inputs['Fac'].default_value = 0.0
+	node_opacity.inputs['Color1'].default_value = (0, 0, 0, 1)
+	node_bump.inputs['Strength'].default_value = 0.0
+	node_color.inputs['Base Color'].default_value = (0, 0, 0, 1)
+	# Set emission color & strength for some versions because Blender devs...
+	if bpy.app.version > (3, 99, 99) and bpy.app.version < (4, 3, 0):
+		node_color.inputs[26].default_value = (0.0, 0.0, 0.0, 1)
 		node_color.inputs[27].default_value = 1.0
+	if bpy.app.version >= (4, 3, 0):
+		node_color.inputs['Emission Color'].default_value = (0.0, 0.0, 0.0, 1)
+		node_color.inputs['Emission Strength'].default_value = 1.0
 
 
 	# Links
-	link = links.new(node_albedo.outputs[0], node_curves.inputs[1]) # Albedo -> Curves
-	link = links.new(node_curves.outputs[0], node_HSV.inputs[4]) # Curves -> HSV	
-	link = links.new(node_color.outputs[0], node_mix.inputs[2]) # Color -> Mix Shader	
-	link = links.new(node_transparent.outputs[0], node_mix.inputs[1]) # Transparent BSDF -> Mix Shader
-	link = links.new(node_combine_original_alpha.outputs[0], node_opacity.inputs[2]) # Combine -> Opacity
-	link = links.new(node_opacity.outputs[0], node_mix.inputs[0]) # Opacity -> Mix
-	link = links.new(node_mix.outputs[0], material_output.inputs[0]) # Mix -> Output
-	link = links.new(node_coord.outputs[2], node_mixRGB.inputs[1]) # Coord -> MixRGB
-	link = links.new(node_coord.outputs[2], node_noise.inputs[0]) # Coord -> Noise
-	link = links.new(node_noise.outputs[1], node_overlayRGB.inputs[2]) # Noise -> OverlayRGB
-	link = links.new(node_mixRGB.outputs[0], node_overlayRGB.inputs[1]) # MixRGB -> OverlayRGB
-	link = links.new(node_overlayRGB.outputs[0], node_albedo.inputs[0]) # OverlayRGB -> Albedo
-	link = links.new(node_invert.outputs[0], node_combine_original_alpha.inputs[1])	# Invert -> Combine
-	link = links.new(node_HSV.outputs[0], node_colorramp_specular.inputs[0]) # HSV -> ColorRamp Specular	
-	link = links.new(node_HSV.outputs[0], node_colorramp_roughness.inputs[0]) # HSV -> ColorRamp Roughness			
-	link = links.new(node_HSV.outputs[0], node_bump.inputs[2]) # HSV -> Bump
-	link = links.new(node_albedo.outputs[1], node_combine_original_alpha.inputs[2]) # Original Alpha -> Mix
+	link = links.new(node_albedo.outputs['Color'], node_curves.inputs['Color']) # Albedo -> Curves
+	link = links.new(node_curves.outputs['Color'], node_HSV.inputs['Color']) # Curves -> HSV	
+	link = links.new(node_color.outputs['BSDF'], node_mix.inputs[2]) # Color -> Mix Shader	
+	link = links.new(node_transparent.outputs['BSDF'], node_mix.inputs[1]) # Transparent BSDF -> Mix Shader
+	link = links.new(node_combine_original_alpha.outputs['Color'], node_opacity.inputs['Color2']) # Combine -> Opacity
+	link = links.new(node_opacity.outputs['Color'], node_mix.inputs['Fac']) # Opacity -> Mix
+	link = links.new(node_mix.outputs['Shader'], material_output.inputs['Surface']) # Mix -> Output
+	link = links.new(node_coord.outputs['UV'], node_mixRGB.inputs['Color1']) # Coord -> MixRGB
+	link = links.new(node_coord.outputs['UV'], node_noise.inputs['Vector']) # Coord -> Noise
+	link = links.new(node_mixRGB.outputs['Color'], node_overlayRGB.inputs['Color1']) # MixRGB -> OverlayRGB
+	link = links.new(node_noise.outputs['Color'], node_overlayRGB.inputs['Color2']) # Noise -> OverlayRGB
+	link = links.new(node_overlayRGB.outputs['Color'], node_albedo.inputs['Vector']) # OverlayRGB -> Albedo
+	link = links.new(node_invert.outputs['Color'], node_combine_original_alpha.inputs['Color1'])	# Invert -> Combine
+	link = links.new(node_HSV.outputs['Color'], node_colorramp_specular.inputs['Fac']) # HSV -> ColorRamp Specular	
+	link = links.new(node_HSV.outputs['Color'], node_colorramp_roughness.inputs['Fac']) # HSV -> ColorRamp Roughness			
+	link = links.new(node_HSV.outputs['Color'], node_bump.inputs['Height']) # HSV -> Bump
+	link = links.new(node_albedo.outputs['Alpha'], node_combine_original_alpha.inputs['Color2']) # Original Alpha -> Mix
 
 	# Backwards Compatibility < 4.0
-	if bpy.app.version > (3, 99, 99):
-		link = links.new(node_HSV.outputs[0], node_color.inputs[26]) # HSV -> 4.0 Emit Color
-		link = links.new(node_colorramp_roughness.outputs[0], node_color.inputs[2]) # ColorRamp Roughness -> Color (Roughness)
-		link = links.new(node_colorramp_specular.outputs[0], node_color.inputs[12]) # ColorRamp Specular -> Color (Specular)
-		link = links.new(node_bump.outputs[0], node_color.inputs[5]) # Bump -> Color (Bump)
-	else:
+	if bpy.app.version <= (3, 99, 99):
 		link = links.new(node_HSV.outputs[0], node_color.inputs[19]) # HSV -> Emit
 		link = links.new(node_colorramp_specular.outputs[0], node_color.inputs[7]) # ColorRamp Specular -> Color (Specular)
 		link = links.new(node_colorramp_roughness.outputs[0], node_color.inputs[9]) # ColorRamp Roughness -> Color (Roughness)
 		link = links.new(node_bump.outputs[0], node_color.inputs[22]) # Bump -> Color (Bump)	
-		
+	if bpy.app.version > (3, 99, 99) and bpy.app.version < (4, 3, 0):
+		link = links.new(node_HSV.outputs[0], node_color.inputs[26]) # HSV -> 4.0 Emit Color
+		link = links.new(node_colorramp_roughness.outputs[0], node_color.inputs[2]) # ColorRamp Roughness -> Color (Roughness)
+		link = links.new(node_colorramp_specular.outputs[0], node_color.inputs[12]) # ColorRamp Specular -> Color (Specular)
+		link = links.new(node_bump.outputs[0], node_color.inputs[5]) # Bump -> Color (Bump)
+	# Using names from now on because Blender devs 
+	if bpy.app.version >= (4, 3, 0):
+		link = links.new(node_HSV.outputs['Color'], node_color.inputs['Emission Color'])
+		link = links.new(node_colorramp_roughness.outputs['Color'], node_color.inputs['Roughness'])
+		link = links.new(node_colorramp_specular.outputs['Color'], node_color.inputs['Specular IOR Level'])
+		link = links.new(node_bump.outputs['Normal'], node_color.inputs['Normal'])					
 	if not mask == None:
-		link = links.new(node_overlayRGB.outputs[0], node_mask.inputs[0]) # OverlayRGB -> Mask
-		link = links.new(node_mask.outputs[0], node_invert.inputs[1]) # Mask -> Invert
+		link = links.new(node_overlayRGB.outputs['Color'], node_mask.inputs['Vector']) # OverlayRGB -> Mask
+		link = links.new(node_mask.outputs['Color'], node_invert.inputs['Color']) # Mask -> Invert
 	else:
-		link = links.new(node_albedo.outputs[1], node_invert.inputs[1]) # Albedo Alpha -> Invert Input
-		link = links.new(node_overlayRGB.outputs[0], node_albedo.inputs[0]) # OverlayRGB -> Albedo
+		link = links.new(node_albedo.outputs['Alpha'], node_invert.inputs['Color']) # Albedo Alpha -> Invert Input
+		link = links.new(node_overlayRGB.outputs['Color'], node_albedo.inputs['Vector']) # OverlayRGB -> Albedo
 
 	# Node Positions
 	material_output.location = Vector((300.0, 0.0))
@@ -264,7 +273,6 @@ class MATTEPAINTER_OT_newLayerFromFile(bpy.types.Operator, ImportHelper):
 		if not camera: # Safety Check
 			bpy.ops.object.camera_add(enter_editmode=False, align='VIEW', location=(0, 0, 0), rotation=(0, 0, 0), scale=(1, 1, 1))
 		camera = bpy.context.scene.camera
-
 		cursor = bpy.context.scene.cursor.location
 
 		# Create Collection
@@ -296,8 +304,10 @@ class MATTEPAINTER_OT_newLayerFromFile(bpy.types.Operator, ImportHelper):
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)		
 		active_object.data.materials.append(material)
-		material.blend_method = "HASHED"
-		material.shadow_method = "CLIP"
+
+		if bpy.app.version < (4, 3, 0):
+			material.blend_method = "HASHED"
+			material.shadow_method = "CLIP"
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
 		links = material.node_tree.links
@@ -352,8 +362,9 @@ class MATTEPAINTER_OT_newEmptyPaintLayer(bpy.types.Operator):
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
 		active_object.data.materials.append(material)
-		material.blend_method = "HASHED"
-		material.shadow_method = "CLIP"
+		if bpy.app.version < (4, 3, 0):
+			material.blend_method = "HASHED"
+			material.shadow_method = "CLIP"
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
 		links = material.node_tree.links
@@ -420,8 +431,9 @@ class MATTEPAINTER_OT_newLayerFromClipboard(bpy.types.Operator):
 		# Shader Setup
 		material = bpy.data.materials.new(name=image.name)
 		active_object.data.materials.append(material)
-		material.blend_method = "HASHED"
-		material.shadow_method = "CLIP"
+		if bpy.app.version < (4, 3, 0):
+			material.blend_method = "HASHED"
+			material.shadow_method = "CLIP"
 		material.use_nodes = True
 		nodes = material.node_tree.nodes
 		links = material.node_tree.links
@@ -581,16 +593,15 @@ class MATTEPAINTER_OT_layerShowMask(bpy.types.Operator):
 		mix = nodes.get("mix")
 		material_output = nodes.get("material_output")
 
-		# need to send the mask to the output
-
-		if opacity.outputs[0].links[0].to_node.name == 'mix':
-			links.remove(mix.outputs[0].links[0])
-			links.remove(opacity.outputs[0].links[0])
-			link = links.new(opacity.outputs[0], material_output.inputs[0])
+		# send the mask straight to the material output:
+		if opacity.outputs['Color'].links[0].to_node.name == 'mix':
+			links.remove(mix.outputs['Shader'].links[0])
+			links.remove(opacity.outputs['Color'].links[0])
+			link = links.new(opacity.outputs['Color'], material_output.inputs['Surface'])
 		else:
-			links.remove(opacity.outputs[0].links[0])
-			link = links.new(opacity.outputs[0], mix.inputs[0])
-			link = links.new(mix.outputs[0], material_output.inputs[0])
+			links.remove(opacity.outputs['Color'].links[0])
+			link = links.new(opacity.outputs['Color'], mix.inputs['Fac'])
+			link = links.new(mix.outputs['Shader'], material_output.inputs['Surface'])
 		return {'FINISHED'}		
 
 class MATTEPAINTER_OT_layerUseEmit(bpy.types.Operator):
@@ -610,16 +621,7 @@ class MATTEPAINTER_OT_layerUseEmit(bpy.types.Operator):
 		bsdf = nodes.get("Principled BSDF")
 		hsv = nodes.get("HSV")
 
-		if bpy.app.version > (3, 99, 99):
-			if bsdf.inputs[0].links:
-				links.remove(bsdf.inputs[0].links[0])
-				links.new(hsv.outputs[0], bsdf.inputs[26])
-			elif bsdf.inputs[26].links:
-				links.remove(bsdf.inputs[26].links[0])
-				links.new(hsv.outputs[0], bsdf.inputs[0])
-			else:
-				return{'CANCELLED'}
-		else:
+		if bpy.app.version <= (3, 99, 99):
 			if bsdf.inputs[0].links:
 				links.remove(bsdf.inputs[0].links[0])
 				links.new(hsv.outputs[0], bsdf.inputs[19])
@@ -628,7 +630,25 @@ class MATTEPAINTER_OT_layerUseEmit(bpy.types.Operator):
 				links.new(hsv.outputs[0], bsdf.inputs[0])
 			else:
 				return{'CANCELLED'}
-
+		if bpy.app.version > (3, 99, 99) and bpy.app.version < (4, 3, 0):
+			if bsdf.inputs[0].links:
+				links.remove(bsdf.inputs[0].links[0])
+				links.new(hsv.outputs[0], bsdf.inputs[26])
+			elif bsdf.inputs[26].links:
+				links.remove(bsdf.inputs[26].links[0])
+				links.new(hsv.outputs[0], bsdf.inputs[0])
+			else:
+				return{'CANCELLED'}
+		if bpy.app.version >= (4, 3, 0):
+			if bsdf.inputs['Base Color'].links:
+				links.remove(bsdf.inputs['Base Color'].links[0])
+				links.new(hsv.outputs['Color'], bsdf.inputs['Emission Color'])
+			elif bsdf.inputs['Emission Color'].links:
+				links.remove(bsdf.inputs['Emission Color'].links[0])
+				links.new(hsv.outputs['Color'], bsdf.inputs['Base Color'])
+			else:
+				self.report({"WARNING"}, 'Principled BSDF Socket mismatch, cancelling.')
+				return{'CANCELLED'}		
 		return {'FINISHED'}					
 
 class MATTEPAINTER_OT_layerBlendOriginalAlpha(bpy.types.Operator):
@@ -649,15 +669,6 @@ class MATTEPAINTER_OT_layerBlendOriginalAlpha(bpy.types.Operator):
 		mask = nodes.get("transparency_mask")
 		albedo = nodes.get("albedo")		
 		combine_original_alpha = nodes.get("combineoriginalalpha")
-
-		'''
-
-		if combine_original_alpha.mute:
-			link = links.new(albedo.outputs[1], combine_original_alpha.inputs[2])
-		else:
-			links.remove(albedo.outputs[1].links[0])
-		'''
-
 		combine_original_alpha.mute = 1-combine_original_alpha.mute
 		return {'FINISHED'}					
 
@@ -686,7 +697,6 @@ class MATTEPAINTER_OT_makeUnique(bpy.types.Operator):
 			new_mask.pixels = pixels
 			node_mask.image = new_mask
 			self.report({"INFO"}, 'Made Shader Tree Unique.')
-
 		return {'FINISHED'}	
 
 #--------------------------------------------------------------
@@ -816,8 +826,9 @@ class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 		name = f'{background_image.image.name}_projection'
 		material = bpy.data.materials.new(name=name)
 		material.use_nodes = True
-		material.blend_method = "HASHED"
-		material.shadow_method = "CLIP"
+		if bpy.app.version > (3, 0, 0) and bpy.app.version < (4, 3, 0):
+			material.blend_method = "HASHED"
+			material.shadow_method = "CLIP"
 		active_object.data.materials.append(material)
 		nodes = material.node_tree.nodes
 		links = material.node_tree.links
@@ -827,7 +838,6 @@ class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 		mask = MATTEPAINTER_FN_addMask(name=mask_name, width=width, height=height)	
 
 		projection_image = bpy.data.images.new(name=name, width=width, height=height)
-		#pixels = [1.0] * (4 * width * height)
 		pixels = [0.0] * (4 * width * height)
 		projection_image.pixels = pixels
 	
@@ -841,7 +851,6 @@ class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 		if not context.mode == 'EDIT':
 			bpy.ops.object.mode_set(mode='EDIT')
 		bpy.ops.mesh.select_all(action='SELECT')	
-		#bpy.ops.uv.project_from_view(camera_bounds=True, correct_aspect=False, scale_to_bounds=True)
 		bpy.ops.uv.smart_project(scale_to_bounds=True)
 
 		if not context.mode == 'PAINT_TEXTURE':
@@ -858,14 +867,11 @@ class MATTEPAINTER_OT_projectImage(bpy.types.Operator):
 		if MATTEPAINTER_FN_checkForAlpha(background_image.image):
 			nodes.get('combineoriginalalpha').mute = False
 
-
 		if previous_mode == 'EDIT':
 			bpy.ops.object.mode_set(mode='EDIT')
 		else:
 			bpy.ops.object.mode_set(mode='OBJECT')
-
-
-	    
+	   
 	    # Select Mask For Painting
 		node_mask = nodes.get('transparency_mask')
 		node_mask.select = True   
@@ -952,7 +958,10 @@ class MATTEPAINTER_OT_clearUnused(bpy.types.Operator):
 	bl_options = {"REGISTER"}
 
 	def execute(self, context):
-		bpy.ops.outliner.orphans_purge('INVOKE_DEFAULT' if True else 'EXEC_DEFAULT', num_deleted=0, do_local_ids=True, do_linked_ids=False, do_recursive=True)
+		if bpy.app.version < (4, 3, 0):
+			bpy.ops.outliner.orphans_purge('INVOKE_DEFAULT' if True else 'EXEC_DEFAULT', num_deleted=0, do_local_ids=True, do_linked_ids=False, do_recursive=True)
+		if bpy.app.version >= (4, 3, 0):
+			bpy.ops.outliner.orphans_purge('INVOKE_DEFAULT' if True else 'EXEC_DEFAULT')
 		return {'FINISHED'}
 
 #--------------------------------------------------------------
@@ -1136,8 +1145,8 @@ class MATTEPAINTER_PT_panelLayers(bpy.types.Panel):
 				else:					
 					layer_nodes = layer_object.data.materials[0].node_tree.nodes
 					opSelect = row.operator(MATTEPAINTER_OT_layerSelect.bl_idname, text=layer_object.name, emboss=True if context.active_object==layer_object else False, depress=True if context.active_object==layer_object else False, icon_value=0) 
-					opVisible = row.operator(MATTEPAINTER_OT_layerVisibility.bl_idname, text="", emboss=False, depress=True, icon_value=253 if layer_object.hide_render else 254)	
-					opLock = row.operator(MATTEPAINTER_OT_layerLock.bl_idname, text="", emboss=False, depress=True, icon_value=41 if layer_object.hide_select else 224)	
+					opVisible = row.operator(MATTEPAINTER_OT_layerVisibility.bl_idname, text="", emboss=False, depress=True, icon='HIDE_ON' if layer_object.hide_render else 'HIDE_OFF')	
+					opLock = row.operator(MATTEPAINTER_OT_layerLock.bl_idname, text="", emboss=False, depress=True, icon='LOCKED' if layer_object.hide_select else 'UNLOCKED')	
 					opInvertMask = row.operator(MATTEPAINTER_OT_layerInvertMask.bl_idname, text="", emboss=False, depress=True, icon='CLIPUV_HLT' if layer_nodes.get('invert').mute else 'CLIPUV_DEHLT')	
 					if not layer_nodes.get('transparency_mask') == None:
 						opShowMask = row.operator(MATTEPAINTER_OT_layerShowMask.bl_idname, text="", emboss=False, depress=True, icon='IMAGE_ALPHA' if layer_nodes.get('opacity').outputs[0].links[0].to_node.name == 'mix' else 'IMAGE_RGB')	
@@ -1167,7 +1176,7 @@ class MATTEPAINTER_PT_panelCameraProjection(bpy.types.Panel):
 		row.operator(MATTEPAINTER_OT_setBackgroundImage.bl_idname, text='Open Image', icon='FILE_FOLDER')
 		row.operator(MATTEPAINTER_OT_matchBackgroundImageResolution.bl_idname, text='Match Scene', icon='RESTRICT_VIEW_OFF')
 		row = layout.row()
-		button_project_image = row.operator(MATTEPAINTER_OT_projectImage.bl_idname, text='Project To Mesh', icon_value=727)
+		button_project_image = row.operator(MATTEPAINTER_OT_projectImage.bl_idname, text='Project To Mesh', icon='DISK_DRIVE')
 		row.operator(MATTEPAINTER_OT_clearBackgroundImages.bl_idname, text='Close Image', icon='CANCEL')		
 		row = layout.row()
 		row.prop(context.scene, 'MATTEPAINTER_VAR_projectResolution', text='Scale Factor')
@@ -1185,8 +1194,8 @@ class MATTEPAINTER_PT_panelFileManagement(bpy.types.Panel):
 	def draw(self, context):
 		layout = self.layout
 		row = layout.row()
-		row.operator(MATTEPAINTER_OT_saveAllImages.bl_idname, text="Save All", icon_value=727)
-		row.operator(MATTEPAINTER_OT_clearUnused.bl_idname, text="Clear Unused", icon_value=21)
+		row.operator(MATTEPAINTER_OT_saveAllImages.bl_idname, text="Save All", icon='DISK_DRIVE')
+		row.operator(MATTEPAINTER_OT_clearUnused.bl_idname, text="Clear Unused", icon='TRASH')
 
 		# Make Sequence 
 		if not bpy.context.active_object == None and bpy.context.active_object.MATTEPAINTER_VAR_isLayer:
@@ -1222,15 +1231,15 @@ class MATTEPAINTER_PT_panelColorGrade(bpy.types.Panel):
 			box.alert = False
 			box.scale_x = 1.0
 			box.scale_y = 1.0					
-			box.prop(layer_nodes[r"opacity"].inputs[0], 'default_value', text=r"Opacity", emboss=True, slider=True)
-			box.prop(layer_nodes[r"blur_mix"].inputs[0], 'default_value', text=r"Blur", emboss=True, slider=True)			
+			box.prop(layer_nodes[r"opacity"].inputs['Fac'], 'default_value', text=r"Opacity", emboss=True, slider=True)
+			box.prop(layer_nodes[r"blur_mix"].inputs['Fac'], 'default_value', text=r"Blur", emboss=True, slider=True)			
 			opToggleCurves = box.operator(MATTEPAINTER_OT_toggleCurves.bl_idname, text="Curves",  emboss=False if layer_nodes.get('curves').mute else True, depress=True, icon='NORMALIZE_FCURVES')
 			sn_layout = box
 			sn_layout.template_curve_mapping(bpy.context.active_object.data.materials[0].node_tree.nodes[r"curves"], 'mapping', type='COLOR')
 			opToggleCurves = box.operator(MATTEPAINTER_OT_toggleHSV.bl_idname, text="HSV",  emboss=False if layer_nodes.get('HSV').mute else True, depress=True, icon='COLOR')
-			box.prop(layer_nodes[r"HSV"].inputs[0], 'default_value', text=r"Hue", emboss=True, slider=True)
-			box.prop(layer_nodes[r"HSV"].inputs[1], 'default_value', text=r"Saturation", emboss=True, slider=True)
-			box.prop(layer_nodes[r"HSV"].inputs[2], 'default_value', text=r"Value", emboss=True, slider=True)
+			box.prop(layer_nodes[r"HSV"].inputs['Hue'], 'default_value', text=r"Hue", emboss=True, slider=True)
+			box.prop(layer_nodes[r"HSV"].inputs['Saturation'], 'default_value', text=r"Saturation", emboss=True, slider=True)
+			box.prop(layer_nodes[r"HSV"].inputs['Value'], 'default_value', text=r"Value", emboss=True, slider=True)
 
 addon_keymaps = []
 
