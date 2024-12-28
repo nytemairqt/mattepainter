@@ -1147,19 +1147,19 @@ class MATTEPAINTER_PT_panelLayers(bpy.types.Panel):
 					opSelect = row.operator(MATTEPAINTER_OT_layerSelect.bl_idname, text=layer_object.name, emboss=True if context.active_object==layer_object else False, depress=True if context.active_object==layer_object else False, icon_value=0) 
 					opVisible = row.operator(MATTEPAINTER_OT_layerVisibility.bl_idname, text="", emboss=False, depress=True, icon='HIDE_ON' if layer_object.hide_render else 'HIDE_OFF')	
 					opLock = row.operator(MATTEPAINTER_OT_layerLock.bl_idname, text="", emboss=False, depress=True, icon='LOCKED' if layer_object.hide_select else 'UNLOCKED')	
-					opInvertMask = row.operator(MATTEPAINTER_OT_layerInvertMask.bl_idname, text="", emboss=False, depress=True, icon='CLIPUV_HLT' if layer_nodes.get('invert').mute else 'CLIPUV_DEHLT')	
-					if not layer_nodes.get('transparency_mask') == None:
-						opShowMask = row.operator(MATTEPAINTER_OT_layerShowMask.bl_idname, text="", emboss=False, depress=True, icon='IMAGE_ALPHA' if layer_nodes.get('opacity').outputs[0].links[0].to_node.name == 'mix' else 'IMAGE_RGB')	
-						opBlendOriginal = row.operator(MATTEPAINTER_OT_layerBlendOriginalAlpha.bl_idname, text="", emboss=False if layer_nodes.get('combineoriginalalpha').mute else True, depress=False , icon='OVERLAY')
+					opInvertMask = row.operator(MATTEPAINTER_OT_layerInvertMask.bl_idname, text="", emboss=False, depress=True, icon='CLIPUV_HLT' if layer_nodes.get('invert').mute else 'CLIPUV_DEHLT')											
 					opUseEmit = row.operator(MATTEPAINTER_OT_layerUseEmit.bl_idname, text="", emboss=False, icon='LIGHT' if layer_nodes.get('Principled BSDF').inputs[0].links else "OUTLINER_OB_LIGHT")
-
 					opSelect.MATTEPAINTER_VAR_layerIndex = i
 					opVisible.MATTEPAINTER_VAR_layerIndex = i
-					opLock.MATTEPAINTER_VAR_layerIndex = i
-					opInvertMask.MATTEPAINTER_VAR_layerIndex = i
-					opShowMask.MATTEPAINTER_VAR_layerIndex = i
-					opBlendOriginal.MATTEPAINTER_VAR_layerIndex = i 
+					opLock.MATTEPAINTER_VAR_layerIndex = i								
 					opUseEmit.MATTEPAINTER_VAR_layerIndex = i
+
+					if not layer_nodes.get('transparency_mask') == None:
+						opInvertMask.MATTEPAINTER_VAR_layerIndex = i	
+						opBlendOriginal.MATTEPAINTER_VAR_layerIndex = i 
+						opShowMask = row.operator(MATTEPAINTER_OT_layerShowMask.bl_idname, text="", emboss=False, depress=True, icon='IMAGE_ALPHA' if layer_nodes.get('opacity').outputs[0].links[0].to_node.name == 'mix' else 'IMAGE_RGB')	
+						opBlendOriginal = row.operator(MATTEPAINTER_OT_layerBlendOriginalAlpha.bl_idname, text="", emboss=False if layer_nodes.get('combineoriginalalpha').mute else True, depress=False , icon='OVERLAY')
+						opShowMask.MATTEPAINTER_VAR_layerIndex = i
 
 class MATTEPAINTER_PT_panelCameraProjection(bpy.types.Panel):
 	bl_label = "Camera Projection"
